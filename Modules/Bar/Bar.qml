@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Services.UPower
@@ -25,8 +26,15 @@ Variants {
 
       WlrLayershell.namespace: "noctalia-bar"
 
-      implicitHeight: (Settings.data.bar.position === "left" || Settings.data.bar.position === "right") ? screen.height : Style.barHeight
-      implicitWidth: (Settings.data.bar.position === "left" || Settings.data.bar.position === "right") ? Style.barHeight : screen.width
+      // Reduced shadow padding
+      property int shadowPadding: Settings.data.bar.floating ? 6 : 0
+
+      implicitHeight: (Settings.data.bar.position === "left" || Settings.data.bar.position === "right") ?
+        screen.height + shadowPadding :
+        Style.barHeight + shadowPadding
+      implicitWidth: (Settings.data.bar.position === "left" || Settings.data.bar.position === "right") ?
+        Style.barHeight + shadowPadding :
+        screen.width + shadowPadding
       color: Color.transparent
 
       anchors {
@@ -36,11 +44,11 @@ Variants {
         right: Settings.data.bar.position === "right" || Settings.data.bar.position === "top" || Settings.data.bar.position === "bottom"
       }
 
-      // Floating bar margins - only apply when floating is enabled
+      // Floating bar margins - reduced Y padding
       // Also don't apply margin on the opposite side ot the bar orientation, ex: if bar is floating on top, margin is only applied on top, not bottom.
       margins {
-        top: Settings.data.bar.floating && Settings.data.bar.position !== "bottom" ? Settings.data.bar.marginVertical * Style.marginXL : 0
-        bottom: Settings.data.bar.floating && Settings.data.bar.position !== "top" ? Settings.data.bar.marginVertical * Style.marginXL : 0
+        top: Settings.data.bar.floating && Settings.data.bar.position !== "bottom" ? Settings.data.bar.marginVertical * Style.marginM : 0
+        bottom: Settings.data.bar.floating && Settings.data.bar.position !== "top" ? Settings.data.bar.marginVertical * Style.marginM : 0
         left: Settings.data.bar.floating && Settings.data.bar.position !== "right" ? Settings.data.bar.marginHorizontal * Style.marginXL : 0
         right: Settings.data.bar.floating && Settings.data.bar.position !== "left" ? Settings.data.bar.marginHorizontal * Style.marginXL : 0
       }
@@ -55,19 +63,37 @@ Variants {
         anchors.fill: parent
         clip: true
 
-        // Background fill with shadow
-        Rectangle {
-          id: bar
-
+        // Container with reduced padding for shadow
+        Item {
+          id: contentContainer
           anchors.fill: parent
-          color: Qt.alpha(Color.mSurface, Settings.data.bar.backgroundOpacity)
+          anchors.margins: Settings.data.bar.floating ? 4 : 0
 
-          // Floating bar rounded corners
-          radius: Settings.data.bar.floating ? Style.radiusL : 0
+          // Main background (no blur)
+          Rectangle {
+            id: bar
+
+            anchors.fill: parent
+            color: Qt.alpha(Color.mSurface, Settings.data.bar.backgroundOpacity)
+
+            // Floating bar rounded corners
+            radius: Settings.data.bar.floating ? Style.radiusS : 0
+
+            // Shadow effect (using theme colors)
+            layer.enabled: Settings.data.bar.floating
+            layer.effect: MultiEffect {
+              shadowEnabled: true
+              shadowBlur: 0.0  // Sharp shadow
+              shadowOpacity: 0.85
+              shadowColor: Color.mSecondary  // Use theme's secondary color from ahmet-cetinkaya
+              shadowHorizontalOffset: 3
+              shadowVerticalOffset: 3
+            }
+          }
         }
 
         MouseArea {
-          anchors.fill: parent
+          anchors.fill: contentContainer
           acceptedButtons: Qt.RightButton
           hoverEnabled: false
           preventStealing: true
@@ -81,7 +107,7 @@ Variants {
         }
 
         Loader {
-          anchors.fill: parent
+          anchors.fill: contentContainer
           sourceComponent: (Settings.data.bar.position === "left" || Settings.data.bar.position === "right") ? verticalBarComponent : horizontalBarComponent
         }
 
