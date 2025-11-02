@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 import qs.Commons
 import qs.Services
 
@@ -24,6 +25,17 @@ Popup {
     border.color: Color.mOutline
     border.width: Style.borderS
     radius: Style.radiusM
+
+    // Hard shadow effect
+    layer.enabled: true
+    layer.effect: MultiEffect {
+      shadowEnabled: true
+      shadowBlur: 0.0  // Sharp shadow
+      shadowOpacity: 0.85
+      shadowColor: Color.mSecondary
+      shadowHorizontalOffset: 3
+      shadowVerticalOffset: 3
+    }
   }
 
   contentItem: NListView {

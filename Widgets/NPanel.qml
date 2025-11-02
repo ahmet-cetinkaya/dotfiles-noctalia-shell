@@ -221,78 +221,16 @@ Loader {
         bottomRightRadius: Style.radiusL
 
 
-        /*// Drop shadow effect
+        // Drop shadow effect
         layer.enabled: true
         layer.effect: MultiEffect {
           shadowEnabled: true
-          shadowBlur: 0.85
-          shadowOpacity: 0.45
-          shadowColor: Color.mShadow
-          shadowHorizontalOffset: (barPosition === "left" || barPosition === "top") ? 6 : - 6
-          shadowVerticalOffset: (barPosition === "left" || barPosition === "top") ? 6 : - 6
-        }*/
-
-        // Set inverted corners based on panel anchors and bar position
-
-        // Top-left corner
-        topLeftInverted: {
-          if (!attachedToBar)
-            return false
-
-          // Inverted if panel is anchored to top edge (bar is at top)
-          if (effectivePanelAnchorTop)
-            return true
-          // Or if panel is anchored to left edge (bar is at left)
-          if (effectivePanelAnchorLeft)
-            return true
-          return false
+          shadowBlur: 0.0  // Sharp shadow
+          shadowOpacity: 0.85
+          shadowColor: Color.mSecondary
+          shadowHorizontalOffset: 3
+          shadowVerticalOffset: 3
         }
-        topLeftInvertedDirection: effectivePanelAnchorTop ? "horizontal" : "vertical"
-
-        // Top-right corner
-        topRightInverted: {
-          if (!attachedToBar)
-            return false
-
-          // Inverted if panel is anchored to top edge (bar is at top)
-          if (effectivePanelAnchorTop)
-            return true
-          // Or if panel is anchored to right edge (bar is at right)
-          if (effectivePanelAnchorRight)
-            return true
-          return false
-        }
-        topRightInvertedDirection: effectivePanelAnchorTop ? "horizontal" : "vertical"
-
-        // Bottom-left corner
-        bottomLeftInverted: {
-          if (!attachedToBar)
-            return false
-
-          // Inverted if panel is anchored to bottom edge (bar is at bottom)
-          if (effectivePanelAnchorBottom)
-            return true
-          // Or if panel is anchored to left edge (bar is at left)
-          if (effectivePanelAnchorLeft)
-            return true
-          return false
-        }
-        bottomLeftInvertedDirection: effectivePanelAnchorBottom ? "horizontal" : "vertical"
-
-        // Bottom-right corner
-        bottomRightInverted: {
-          if (!attachedToBar)
-            return false
-
-          // Inverted if panel is anchored to bottom edge (bar is at bottom)
-          if (effectivePanelAnchorBottom)
-            return true
-          // Or if panel is anchored to right edge (bar is at right)
-          if (effectivePanelAnchorRight)
-            return true
-          return false
-        }
-        bottomRightInvertedDirection: effectivePanelAnchorBottom ? "horizontal" : "vertical"
 
         // Dragging support
         property bool draggable: root.draggable
