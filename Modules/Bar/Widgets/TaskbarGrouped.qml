@@ -5,7 +5,8 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.Commons
-import qs.Services
+import qs.Services.Compositor
+import qs.Services.UI
 import qs.Widgets
 
 Item {
@@ -361,6 +362,123 @@ Item {
                 TooltipService.hide()
               }
             }
+          }
+        }
+      }
+
+      Item {
+        id: workspaceNumberContainer
+
+        visible: root.showWorkspaceNumbers && (!root.showNumbersOnlyWhenOccupied || container.hasWindows)
+
+        anchors {
+          left: parent.left
+          top: parent.top
+          leftMargin: -Style.fontSizeXS * 0.5
+          topMargin: -Style.fontSizeXS * 0.5
+        }
+
+        width: Math.max(workspaceNumber.implicitWidth + Style.marginXS, Style.fontSizeXXS * 2)
+        height: Math.max(workspaceNumber.implicitHeight + Style.marginXS, Style.fontSizeXXS * 2)
+
+        Rectangle {
+          id: workspaceNumberBackground
+
+          anchors.fill: parent
+          radius: width * 0.5
+
+          color: {
+            if (workspaceModel.isFocused)
+              return Color.mPrimary
+            if (workspaceModel.isUrgent)
+              return Color.mError
+            if (hasWindows)
+              return Color.mSecondary
+
+            return Qt.alpha(Color.mOutline, 0.3)
+          }
+
+          scale: workspaceModel.isActive ? 1.0 : 0.9
+
+          Behavior on scale {
+            NumberAnimation {
+              duration: Style.animationNormal
+              easing.type: Easing.OutBack
+            }
+          }
+
+          Behavior on color {
+            ColorAnimation {
+              duration: Style.animationFast
+              easing.type: Easing.InOutCubic
+            }
+          }
+        }
+
+        // Burst effect overlay for focused workspace number (smaller outline)
+        Rectangle {
+          id: workspaceNumberBurst
+          anchors.centerIn: workspaceNumberContainer
+          width: workspaceNumberContainer.width + 12 * root.masterProgress
+          height: workspaceNumberContainer.height + 12 * root.masterProgress
+          radius: width / 2
+          color: Color.transparent
+          border.color: root.effectColor
+          border.width: Math.max(1, Math.round((2 + 4 * (1.0 - root.masterProgress))))
+          opacity: root.effectsActive && workspaceModel.isFocused ? (1.0 - root.masterProgress) * 0.7 : 0
+          visible: root.effectsActive && workspaceModel.isFocused
+          z: 1
+        }
+
+        NText {
+          id: workspaceNumber
+
+          anchors.centerIn: parent
+
+          text: workspaceModel.idx.toString()
+
+          family: Settings.data.ui.fontFixed
+          font {
+            pointSize: Style.fontSizeXXS
+            weight: Style.fontWeightBold
+            capitalization: Font.AllUppercase
+          }
+          applyUiScale: false
+
+          color: {
+            if (workspaceModel.isFocused)
+              return Color.mOnPrimary
+            if (workspaceModel.isUrgent)
+              return Color.mOnError
+            if (hasWindows)
+              return Color.mOnSecondary
+
+            return Color.mOnSurface
+          }
+
+          opacity: {
+            if (workspaceModel.isFocused)
+              return 1.0
+            if (workspaceModel.isUrgent)
+              return 0.9
+            if (hasWindows)
+              return 0.8
+
+            return 0.6
+          }
+
+          Behavior on opacity {
+            NumberAnimation {
+              duration: Style.animationFast
+              easing.type: Easing.InOutCubic
+            }
+          }
+        }
+
+        Behavior on opacity {
+          NumberAnimation {
+            duration: Style.animationFast
+            easing.type: Easing.InOutCubic
           }
         }
       }
