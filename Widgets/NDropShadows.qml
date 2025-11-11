@@ -16,11 +16,11 @@ Item {
     source: root.source
     shadowEnabled: true
     blurMax: Style.shadowBlurMax
-    shadowBlur: Style.shadowBlur
-    shadowOpacity: Style.shadowOpacity
-    shadowColor: Color.black
-    shadowHorizontalOffset: Settings.data.general.shadowOffsetX
-    shadowVerticalOffset: Settings.data.general.shadowOffsetY
+    shadowBlur: 0.0  // Sharp shadow for hard appearance
+    shadowOpacity: 0.85  // High opacity for visibility
+    shadowColor: Color.mSecondary  // Secondary color instead of black
+    shadowHorizontalOffset: 3  // Fixed horizontal offset
+    shadowVerticalOffset: 3  // Fixed vertical offset
     autoPaddingEnabled: root.autoPaddingEnabled
   }
 }
