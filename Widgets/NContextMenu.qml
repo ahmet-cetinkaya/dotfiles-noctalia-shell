@@ -18,29 +18,27 @@ Popup {
   width: 180
   padding: Style.marginS
 
-  // Background rectangle without shadow
-  Rectangle {
-    id: backgroundRect
-    anchors.fill: parent
+  // Background rectangle - set as actual background property
+  background: Rectangle {
     color: Color.mSurfaceVariant
     border.color: Color.mOutline
     border.width: Style.borderS
     radius: Style.iRadiusM
   }
 
-  // Apply hard shadow using NDropShadow
+  // Add shadow effect
   NDropShadow {
     id: shadowWrapper
-    anchors.fill: backgroundRect
-    source: backgroundRect
+    anchors.fill: parent
+    source: parent
     autoPaddingEnabled: true
 
-    // Override with hard shadow settings
-    shadowBlur: 0.0
-    shadowOpacity: 0.85
-    shadowColor: Color.mSecondary
-    shadowHorizontalOffset: 3
-    shadowVerticalOffset: 3
+    // Soft shadow settings for visibility
+    shadowBlur: 8.0
+    shadowOpacity: 0.3
+    shadowColor: Color.black
+    shadowHorizontalOffset: 2
+    shadowVerticalOffset: 2
   }
 
   contentItem: NListView {
@@ -50,6 +48,7 @@ Popup {
     interactive: contentHeight > root.height
     verticalPolicy: root.verticalPolicy
     horizontalPolicy: root.horizontalPolicy
+    z: 100
 
     delegate: ItemDelegate {
       id: menuItem
