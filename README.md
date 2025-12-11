@@ -1,6 +1,6 @@
 # Ahmet Çetinkaya's Noctalia Shell Fork
 
-**This is Ahmet Çetinkaya's personal fork** of the Noctalia shell, featuring extensive customizations and contributions to enhance the desktop experience.
+**This is Ahmet Çetinkaya's personal fork** of the Noctalia shell, featuring extensive customizations and contributions to enhance the desktop experience. You can jump to the original README _[from here](https://github.com/ahmet-cetinkaya/dotfiles-noctalia-shell/tree/main?tab=readme-ov-file#noctalia-shell)_.
 
 ### 🎨 Custom Features
 
