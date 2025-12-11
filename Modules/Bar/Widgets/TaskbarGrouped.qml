@@ -124,6 +124,22 @@ Item {
   onScreenChanged: refreshWorkspaces()
   onHideUnoccupiedChanged: refreshWorkspaces()
 
+  // Main layout for workspaces
+  Flow {
+    id: taskbarGrid
+
+    anchors.fill: parent
+    anchors.margins: Style.marginM
+
+    spacing: Style.marginS
+    flow: root.isVerticalBar ? Flow.LeftToRight : Flow.TopToBottom
+
+    Repeater {
+      model: localWorkspaces
+      delegate: workspaceRepeaterDelegate
+    }
+  }
+
   implicitWidth: isVerticalBar ? taskbarGrid.implicitWidth + Style.marginM * 2 : Math.round(taskbarGrid.implicitWidth + Style.marginM * 2)
   implicitHeight: isVerticalBar ? Math.round(taskbarGrid.implicitHeight + Style.marginM * 2) : Style.barHeight
 
@@ -535,25 +551,6 @@ Item {
             duration: Style.animationFast
             easing.type: Easing.InOutCubic
           }
-        }
-      }
-
-      Flow {
-        id: taskbarGrid
-
-        anchors.verticalCenter: isVerticalBar ? undefined : parent.verticalCenter
-        anchors.left: isVerticalBar ? undefined : parent.left
-        anchors.leftMargin: isVerticalBar ? 0 : Style.marginM
-        anchors.horizontalCenter: isVerticalBar ? parent.horizontalCenter : undefined
-        anchors.top: isVerticalBar ? parent.top : undefined
-        anchors.topMargin: isVerticalBar ? Style.marginM : 0
-
-        spacing: Style.marginS
-        flow: isVerticalBar ? Flow.TopToBottom : Flow.LeftToRight
-
-        Repeater {
-          model: localWorkspaces
-          delegate: workspaceRepeaterDelegate
         }
       }
 
