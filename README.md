@@ -1,3 +1,55 @@
+# Ahmet Çetinkaya's Noctalia Shell Fork
+
+**This is Ahmet Çetinkaya's personal fork** of the Noctalia shell, featuring extensive customizations and contributions to enhance the desktop experience.
+
+### 🎨 Custom Features
+
+**Personal Color Scheme**: Custom `ahmet-cetinkaya` color theme with golden-yellow accents (#f4d03f primary) and carefully balanced dark/light variants
+
+**Enhanced UI Polish**:
+
+- Hard shadow effects for improved depth perception
+- Refined panel corners with simplified design
+- Reduced visual padding for cleaner appearance
+- Improved drop shadow rendering across widgets
+- Enhanced hover states and transitions
+
+**Taskbar Improvements**:
+
+- Workspace numbers integration in TaskbarGrouped widget
+- Fixed duplicate workspace number functionality
+- Better focus handling and z-order management
+
+**🇹🇷 Turkish Language Support**: Complete Turkish translations for the interface, making Noctalia accessible to Turkish-speaking users
+
+**Notification System Enhancements**:
+
+- QtMultimedia availability checks with graceful fallbacks
+- Sound settings and playback functionality
+- Performance mode respect for notification sounds
+- Improved exclude apps translations
+- Center-aligned notification icons
+
+**Compositor Integration**:
+
+- Enhanced Hyprland service with better window focus handling
+- Reduced focus line complexity for cleaner operation
+- Proper z-order handling for window management
+
+### 🔧 Technical Changes
+
+- Removed Nix flake configuration for simpler deployment
+- Improved notification sound architecture with better error handling
+- Enhanced color scheme system with hover color support
+
+### 📦 Repository Structure
+
+- **Origin**: `https://github.com/ahmet-cetinkaya/dotfiles-noctalia-shell`
+- **Upstream**: Regularly syncs with `https://github.com/noctalia-dev/noctalia-shell`
+- **Branches**: Maintains feature branches for notification sounds, taskbar fixes, and Turkish language support
+
+---
+
 # Noctalia shell
 
 **_quiet by design_**
@@ -34,11 +86,13 @@
 A beautiful, minimal desktop shell for Wayland that actually gets out of your way. Built on Quickshell with a warm lavender aesthetic that you can easily customize to match your vibe.
 
 **✨ Key Features:**
+
 - 🪟 Native support for Niri, Hyprland, Sway and MangoWC
 - ⚡ Built on Quickshell for performance
 - 🎯 Minimalist design philosophy
 - 🔧 Easily customizable to match your style
 - 🎨 Many color schemes available
+
 ---
 
 ## Preview
@@ -98,6 +152,7 @@ Noctalia provides native support for **Niri**, **Hyprland** and **Sway**. Other 
 We welcome contributions of any size - bug fixes, new features, documentation improvements, or custom themes and configs.
 
 **Get involved:**
+
 - **Found a bug?** [Open an issue](https://github.com/noctalia-dev/noctalia-shell/issues/new)
 - **Want to code?** Check out our [development guidelines](https://docs.noctalia.dev/development/guideline)
 - **Need help?** Join our [Discord](https://discord.noctalia.dev)
@@ -123,17 +178,18 @@ While all donations are greatly appreciated, they are completely voluntary.
 </a>
 
 ### Thank you to everyone who supports the project 💜!
-* Gohma
-* DiscoCevapi
-* <a href="https://pika-os.com/" target="_blank">PikaOS</a>
-* LionHeartP
-* Nyxion ツ
-* RockDuck
-* MrDowntempo
-* Tempus Thales
-* Raine
-* JustCurtis
-* llego
+
+- Gohma
+- DiscoCevapi
+- <a href="https://pika-os.com/" target="_blank">PikaOS</a>
+- LionHeartP
+- Nyxion ツ
+- RockDuck
+- MrDowntempo
+- Tempus Thales
+- Raine
+- JustCurtis
+- llego
 
 ---
 
