@@ -1,42 +1,43 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
 import QtQuick.Effects
+import QtQuick.Layouts
 import Quickshell
-import Quickshell.Wayland
+import Quickshell.Io
 import Quickshell.Services.Pam
 import Quickshell.Services.UPower
-import Quickshell.Io
+import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.Commons
+import qs.Services.Compositor
 import qs.Services.Hardware
+import qs.Services.Keyboard
 import qs.Services.Location
 import qs.Services.Media
-import qs.Services.Compositor
+import qs.Services.Networking
+import qs.Services.System
 import qs.Services.UI
 import qs.Widgets
 import qs.Widgets.AudioSpectrum
 
 Loader {
-  id: lockScreen
+  id: root
   active: false
 
-  // Track if triggered via deprecated IPC call
-  property bool triggeredViaDeprecatedCall: false
+  Component.onCompleted: {
+    // Register with panel service
+    PanelService.lockScreen = this;
+  }
 
   Timer {
     id: unloadAfterUnlockTimer
     interval: 250
     repeat: false
-    onTriggered: {
-      lockScreen.active = false
-      // Reset the deprecation flag when unlocking
-      lockScreen.triggeredViaDeprecatedCall = false
-    }
+    onTriggered: root.active = false
   }
 
   function scheduleUnloadAfterUnlock() {
-    unloadAfterUnlockTimer.start()
+    unloadAfterUnlockTimer.start();
   }
 
   sourceComponent: Component {
@@ -46,34 +47,87 @@ Loader {
       LockContext {
         id: lockContext
         onUnlocked: {
-          lockSession.locked = false
-          lockScreen.scheduleUnloadAfterUnlock()
-          lockContext.currentText = ""
+          lockSession.locked = false;
+          root.scheduleUnloadAfterUnlock();
+          lockContext.currentText = "";
         }
         onFailed: {
-          lockContext.currentText = ""
+          lockContext.currentText = "";
         }
       }
 
       WlSessionLock {
         id: lockSession
-        locked: lockScreen.active
+        locked: root.active
 
         WlSessionLockSurface {
           readonly property var now: Time.now
 
           Item {
             id: batteryIndicator
-            property var battery: UPower.displayDevice
-            property bool isReady: battery && battery.ready && battery.isLaptopBattery && battery.isPresent
-            property real percent: isReady ? (battery.percentage * 100) : 0
-            property bool charging: isReady ? battery.state === UPowerDeviceState.Charging : false
+            property bool initializationComplete: false
+            Timer {
+              interval: 500
+              running: true
+              onTriggered: batteryIndicator.initializationComplete = true
+            }
+
+            // Find first connected Bluetooth device with battery
+            function findBluetoothBatteryDevice() {
+              if (!BluetoothService.devices) {
+                return null;
+              }
+              var devices = BluetoothService.devices.values || [];
+              for (var i = 0; i < devices.length; i++) {
+                var device = devices[i];
+                if (device && device.connected && device.batteryAvailable && device.battery !== undefined) {
+                  return device;
+                }
+              }
+              return null;
+            }
+
+            // Find laptop battery device, falling back to displayDevice if none found
+            function findLaptopBattery() {
+              if (UPower.displayDevice && UPower.displayDevice.isLaptopBattery) {
+                return UPower.displayDevice;
+              }
+
+              if (!UPower.devices) {
+                return UPower.displayDevice;
+              }
+
+              var devices = UPower.devices.values || [];
+              for (var i = 0; i < devices.length; i++) {
+                var device = devices[i];
+                if (device && device.type === UPowerDeviceType.Battery && device.isLaptopBattery && device.percentage !== undefined) {
+                  return device;
+                }
+              }
+              return UPower.displayDevice;
+            }
+
+            readonly property var bluetoothDevice: findBluetoothBatteryDevice()
+            readonly property bool hasBluetoothBattery: bluetoothDevice && bluetoothDevice.batteryAvailable && bluetoothDevice.battery !== undefined
+            readonly property var battery: findLaptopBattery()
+            readonly property bool isDevicePresent: {
+              if (hasBluetoothBattery) {
+                return bluetoothDevice.connected === true;
+              }
+              if (battery) {
+                return (battery.type === UPowerDeviceType.Battery && battery.isPresent !== undefined) ? battery.isPresent : (battery.ready && battery.percentage !== undefined);
+              }
+              return false;
+            }
+            property bool isReady: initializationComplete && isDevicePresent && (hasBluetoothBattery || (battery && battery.ready && battery.percentage !== undefined))
+            property real percent: isReady ? (hasBluetoothBattery ? (bluetoothDevice.battery * 100) : (battery.percentage * 100)) : 0
+            property bool charging: isReady ? (hasBluetoothBattery ? false : (battery ? battery.state === UPowerDeviceState.Charging : false)) : false
             property bool batteryVisible: isReady && percent > 0
           }
 
           Item {
             id: keyboardLayout
-            property string currentLayout: (typeof KeyboardLayoutService !== 'undefined' && KeyboardLayoutService.currentLayout) ? KeyboardLayoutService.currentLayout : "Unknown"
+            property string currentLayout: KeyboardLayoutService.currentLayout
           }
 
           Image {
@@ -84,6 +138,7 @@ Loader {
             cache: true
             smooth: true
             mipmap: false
+            antialiasing: true
           }
 
           Rectangle {
@@ -128,21 +183,20 @@ Loader {
               smooth: false
 
               onPaint: {
-                const ctx = getContext("2d")
+                const ctx = getContext("2d");
                 if (!ctx)
-                  return
+                  return;
+                ctx.reset();
+                ctx.clearRect(0, 0, width, height);
 
-                ctx.reset()
-                ctx.clearRect(0, 0, width, height)
+                ctx.fillStyle = parent.cornerColor;
+                ctx.fillRect(0, 0, width, height);
 
-                ctx.fillStyle = parent.cornerColor
-                ctx.fillRect(0, 0, width, height)
-
-                ctx.globalCompositeOperation = "destination-out"
-                ctx.fillStyle = "#ffffff"
-                ctx.beginPath()
-                ctx.arc(width, height, parent.cornerRadius, 0, 2 * Math.PI)
-                ctx.fill()
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(width, height, parent.cornerRadius, 0, 2 * Math.PI);
+                ctx.fill();
               }
 
               onWidthChanged: if (available)
@@ -162,21 +216,20 @@ Loader {
               smooth: true
 
               onPaint: {
-                const ctx = getContext("2d")
+                const ctx = getContext("2d");
                 if (!ctx)
-                  return
+                  return;
+                ctx.reset();
+                ctx.clearRect(0, 0, width, height);
 
-                ctx.reset()
-                ctx.clearRect(0, 0, width, height)
+                ctx.fillStyle = parent.cornerColor;
+                ctx.fillRect(0, 0, width, height);
 
-                ctx.fillStyle = parent.cornerColor
-                ctx.fillRect(0, 0, width, height)
-
-                ctx.globalCompositeOperation = "destination-out"
-                ctx.fillStyle = "#ffffff"
-                ctx.beginPath()
-                ctx.arc(0, height, parent.cornerRadius, 0, 2 * Math.PI)
-                ctx.fill()
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(0, height, parent.cornerRadius, 0, 2 * Math.PI);
+                ctx.fill();
               }
 
               onWidthChanged: if (available)
@@ -196,21 +249,20 @@ Loader {
               smooth: true
 
               onPaint: {
-                const ctx = getContext("2d")
+                const ctx = getContext("2d");
                 if (!ctx)
-                  return
+                  return;
+                ctx.reset();
+                ctx.clearRect(0, 0, width, height);
 
-                ctx.reset()
-                ctx.clearRect(0, 0, width, height)
+                ctx.fillStyle = parent.cornerColor;
+                ctx.fillRect(0, 0, width, height);
 
-                ctx.fillStyle = parent.cornerColor
-                ctx.fillRect(0, 0, width, height)
-
-                ctx.globalCompositeOperation = "destination-out"
-                ctx.fillStyle = "#ffffff"
-                ctx.beginPath()
-                ctx.arc(width, 0, parent.cornerRadius, 0, 2 * Math.PI)
-                ctx.fill()
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(width, 0, parent.cornerRadius, 0, 2 * Math.PI);
+                ctx.fill();
               }
 
               onWidthChanged: if (available)
@@ -230,21 +282,20 @@ Loader {
               smooth: true
 
               onPaint: {
-                const ctx = getContext("2d")
+                const ctx = getContext("2d");
                 if (!ctx)
-                  return
+                  return;
+                ctx.reset();
+                ctx.clearRect(0, 0, width, height);
 
-                ctx.reset()
-                ctx.clearRect(0, 0, width, height)
+                ctx.fillStyle = parent.cornerColor;
+                ctx.fillRect(0, 0, width, height);
 
-                ctx.fillStyle = parent.cornerColor
-                ctx.fillRect(0, 0, width, height)
-
-                ctx.globalCompositeOperation = "destination-out"
-                ctx.fillStyle = "#ffffff"
-                ctx.beginPath()
-                ctx.arc(0, 0, parent.cornerRadius, 0, 2 * Math.PI)
-                ctx.fill()
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(0, 0, parent.cornerRadius, 0, 2 * Math.PI);
+                ctx.fill();
               }
 
               onWidthChanged: if (available)
@@ -280,7 +331,7 @@ Loader {
                   Layout.preferredWidth: 70
                   Layout.preferredHeight: 70
                   Layout.alignment: Qt.AlignVCenter
-                  radius: width * 0.5
+                  radius: width / 2
                   color: Color.transparent
 
                   Rectangle {
@@ -305,10 +356,11 @@ Loader {
                     }
                   }
 
-                  NImageCircled {
+                  NImageRounded {
                     anchors.centerIn: parent
                     width: 66
                     height: 66
+                    radius: width / 2
                     imagePath: Settings.preprocessPath(Settings.data.general.avatarImage)
                     fallbackIcon: "person"
 
@@ -335,7 +387,7 @@ Loader {
 
                   // Welcome back + Username on one line
                   NText {
-                    text: I18n.tr("lock-screen.welcome-back") + " " + (Quickshell.env("USER").charAt(0).toUpperCase() + Quickshell.env("USER").slice(1)) + "!"
+                    text: I18n.tr("lock-screen.welcome-back") + " " + HostService.displayName + "!"
                     pointSize: Style.fontSizeXXL
                     font.weight: Font.Medium
                     color: Color.mOnSurface
@@ -345,17 +397,18 @@ Loader {
                   // Date below
                   NText {
                     text: {
-                      var lang = I18n.locale.name.split("_")[0]
+                      var lang = I18n.locale.name.split("_")[0];
                       var formats = {
                         "de": "dddd, d. MMMM",
+                        "en": "dddd, MMMM d",
                         "es": "dddd, d 'de' MMMM",
                         "fr": "dddd d MMMM",
+                        "ja": "yyyy年M月d日 dddd",
+                        "nl": "dddd d MMMM",
                         "pt": "dddd, d 'de' MMMM",
-                        "zh": "yyyy年M月d日 dddd",
-                        "uk": "dddd, d MMMM",
-                        "tr": "dddd, d MMMM"
-                      }
-                      return I18n.locale.toString(Time.now, formats[lang] || "dddd, MMMM d")
+                        "zh": "yyyy年M月d日 dddd"
+                      };
+                      return I18n.locale.toString(Time.now, formats[lang] || "dddd, d MMMM");
                     }
                     pointSize: Style.fontSizeXL
                     font.weight: Font.Medium
@@ -379,76 +432,20 @@ Loader {
                   backgroundColor: Color.mSurface
                   clockColor: Color.mOnSurface
                   secondHandColor: Color.mPrimary
-                }
-              }
-            }
-
-            // Deprecation warning (shown above error notification)
-            Rectangle {
-              width: Math.min(650, parent.width - 40)
-              implicitHeight: deprecationContent.implicitHeight + 24
-              height: implicitHeight
-              anchors.horizontalCenter: parent.horizontalCenter
-              anchors.bottom: parent.bottom
-              anchors.bottomMargin: (Settings.data.general.compactLockScreen ? 320 : 400) * Style.uiScaleRatio
-              radius: Style.radiusL
-              color: Qt.alpha(Color.mTertiary, 0.95)
-              border.color: Color.mTertiary
-              border.width: 2
-              visible: lockScreen.triggeredViaDeprecatedCall
-              opacity: visible ? 1.0 : 0.0
-
-              ColumnLayout {
-                id: deprecationContent
-                anchors.fill: parent
-                anchors.margins: 12
-                spacing: 6
-
-                RowLayout {
-                  Layout.alignment: Qt.AlignHCenter
-                  spacing: 8
-
-                  NIcon {
-                    icon: "alert-triangle"
-                    pointSize: Style.fontSizeL
-                    color: Color.mOnTertiary
-                  }
-
-                  NText {
-                    text: "Deprecated IPC Call"
-                    color: Color.mOnTertiary
-                    pointSize: Style.fontSizeL
-                    font.weight: Font.Bold
-                  }
-                }
-
-                NText {
-                  text: "The 'lockScreen toggle' IPC call is deprecated. Use 'lockScreen lock' instead."
-                  color: Color.mOnTertiary
-                  pointSize: Style.fontSizeM
-                  horizontalAlignment: Text.AlignHCenter
-                  Layout.alignment: Qt.AlignHCenter
-                  Layout.fillWidth: true
-                  wrapMode: Text.WordWrap
-                }
-              }
-
-              Behavior on opacity {
-                NumberAnimation {
-                  duration: 300
-                  easing.type: Easing.OutCubic
+                  hoursFontSize: Style.fontSizeL
+                  minutesFontSize: Style.fontSizeL
                 }
               }
             }
 
             // Error notification
             Rectangle {
-              width: 450
-              height: 60
+              width: errorRowLayout.implicitWidth + Style.marginXL * 1.5
+              height: 50
               anchors.horizontalCenter: parent.horizontalCenter
               anchors.bottom: parent.bottom
-              anchors.bottomMargin: (Settings.data.general.compactLockScreen ? 240 : 320) * Style.uiScaleRatio
-              radius: 30
+              anchors.bottomMargin: (Settings.data.general.compactLockScreen ? 280 : 360) * Style.uiScaleRatio
+              radius: Style.radiusL
               color: Color.mError
               border.color: Color.mError
               border.width: 1
@@ -456,6 +453,7 @@ Loader {
               opacity: visible ? 1.0 : 0.0
 
               RowLayout {
+                id: errorRowLayout
                 anchors.centerIn: parent
                 spacing: 10
 
@@ -485,15 +483,15 @@ Loader {
             // Compact status indicators container (compact mode only)
             Rectangle {
               width: {
-                var hasBattery = UPower.displayDevice && UPower.displayDevice.ready && UPower.displayDevice.isPresent
-                var hasKeyboard = keyboardLayout.currentLayout !== "Unknown"
+                var hasBattery = batteryIndicator.isReady;
+                var hasKeyboard = keyboardLayout.currentLayout !== "Unknown";
 
                 if (hasBattery && hasKeyboard) {
-                  return 200
+                  return 200;
                 } else if (hasBattery || hasKeyboard) {
-                  return 120
+                  return 120;
                 } else {
-                  return 0
+                  return 0;
                 }
               }
               height: 40
@@ -503,7 +501,7 @@ Loader {
               topLeftRadius: Style.radiusL
               topRightRadius: Style.radiusL
               color: Color.mSurface
-              visible: Settings.data.general.compactLockScreen && ((UPower.displayDevice && UPower.displayDevice.ready && UPower.displayDevice.isPresent) || keyboardLayout.currentLayout !== "Unknown")
+              visible: Settings.data.general.compactLockScreen && (batteryIndicator.isReady || keyboardLayout.currentLayout !== "Unknown")
 
               RowLayout {
                 anchors.centerIn: parent
@@ -512,16 +510,16 @@ Loader {
                 // Battery indicator
                 RowLayout {
                   spacing: 6
-                  visible: UPower.displayDevice && UPower.displayDevice.ready && UPower.displayDevice.isPresent
+                  visible: batteryIndicator.isReady
 
                   NIcon {
-                    icon: BatteryService.getIcon(Math.round(UPower.displayDevice.percentage * 100), UPower.displayDevice.state === UPowerDeviceState.Charging, true)
+                    icon: BatteryService.getIcon(Math.round(batteryIndicator.percent), batteryIndicator.charging, batteryIndicator.isReady)
                     pointSize: Style.fontSizeM
-                    color: UPower.displayDevice.state === UPowerDeviceState.Charging ? Color.mPrimary : Color.mOnSurfaceVariant
+                    color: batteryIndicator.charging ? Color.mPrimary : Color.mOnSurfaceVariant
                   }
 
                   NText {
-                    text: Math.round(UPower.displayDevice.percentage * 100) + "%"
+                    text: Math.round(batteryIndicator.percent) + "%"
                     color: Color.mOnSurfaceVariant
                     pointSize: Style.fontSizeM
                     font.weight: Font.Medium
@@ -552,13 +550,78 @@ Loader {
 
             // Bottom container with weather, password input and controls
             Rectangle {
-              width: 750
-              height: Settings.data.general.compactLockScreen ? 120 : 220
+              id: bottomContainer
+
+              // Support for removing the session/power buttons at the bottom.
+              readonly property int deltaY: Settings.data.general.showSessionButtonsOnLockScreen ? 0 : (Settings.data.general.compactLockScreen ? 36 : 48) + 14
+
+              height: {
+                let calcHeight = Settings.data.general.compactLockScreen ? 120 : 220;
+                if (!Settings.data.general.showSessionButtonsOnLockScreen) {
+                  calcHeight -= bottomContainer.deltaY;
+                }
+                return calcHeight;
+              }
               anchors.horizontalCenter: parent.horizontalCenter
               anchors.bottom: parent.bottom
-              anchors.bottomMargin: 100
+              anchors.bottomMargin: 100 + bottomContainer.deltaY
               radius: Style.radiusL
               color: Color.mSurface
+
+              // Measure text widths to determine minimum button width (for container width calculation)
+              Item {
+                id: buttonRowTextMeasurer
+                visible: false
+                property real iconSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
+                property real fontSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
+                property real spacing: 6
+                property real padding: 18 // Approximate horizontal padding per button
+
+                // Measure all button text widths
+                Text {
+                  id: logoutText
+                  text: I18n.tr("session-menu.logout")
+                  font.pointSize: buttonRowTextMeasurer.fontSize
+                  font.weight: Font.Medium
+                }
+                Text {
+                  id: suspendText
+                  text: I18n.tr("session-menu.suspend")
+                  font.pointSize: buttonRowTextMeasurer.fontSize
+                  font.weight: Font.Medium
+                }
+                Text {
+                  id: hibernateText
+                  text: Settings.data.general.showHibernateOnLockScreen ? I18n.tr("session-menu.hibernate") : ""
+                  font.pointSize: buttonRowTextMeasurer.fontSize
+                  font.weight: Font.Medium
+                }
+                Text {
+                  id: rebootText
+                  text: I18n.tr("session-menu.reboot")
+                  font.pointSize: buttonRowTextMeasurer.fontSize
+                  font.weight: Font.Medium
+                }
+                Text {
+                  id: shutdownText
+                  text: I18n.tr("session-menu.shutdown")
+                  font.pointSize: buttonRowTextMeasurer.fontSize
+                  font.weight: Font.Medium
+                }
+
+                // Calculate maximum width needed
+                property real maxTextWidth: Math.max(logoutText.implicitWidth, Math.max(suspendText.implicitWidth, Math.max(hibernateText.implicitWidth, Math.max(rebootText.implicitWidth, shutdownText.implicitWidth))))
+                property real minButtonWidth: maxTextWidth + iconSize + spacing + padding
+              }
+
+              // Calculate minimum width based on button requirements
+              // Button row needs: margins + buttons (4 or 5 depending on hibernate visibility) + spacings + margins
+              // Plus ColumnLayout margins (14 on each side = 28 total)
+              // Add extra buffer to ensure password input has proper padding
+              property int buttonCount: Settings.data.general.showHibernateOnLockScreen ? 5 : 4
+              property int spacingCount: buttonCount - 1
+              property real minButtonRowWidth: buttonRowTextMeasurer.minButtonWidth > 0 ? (buttonCount * buttonRowTextMeasurer.minButtonWidth) + (spacingCount * 10) + 40 + (2 * Style.marginM) + 28 + (2 * Style.marginM) : 750
+              width: Math.max(750, minButtonRowWidth)
 
               ColumnLayout {
                 anchors.fill: parent
@@ -578,7 +641,7 @@ Loader {
                     // Expand to take remaining space when weather is hidden
                     Layout.fillWidth: !(Settings.data.location.weatherEnabled && LocationService.data.weather !== null)
                     Layout.preferredHeight: 50
-                    radius: 25
+                    radius: Style.radiusL
                     color: Color.transparent
                     clip: true
                     visible: MediaService.currentPlayer && MediaService.canPlay
@@ -631,13 +694,14 @@ Loader {
                       Rectangle {
                         Layout.preferredWidth: 34
                         Layout.preferredHeight: 34
-                        radius: width * 0.5
+                        radius: Math.min(Style.radiusL, width / 2)
                         color: Color.transparent
                         clip: true
 
-                        NImageCircled {
+                        NImageRounded {
                           anchors.fill: parent
                           anchors.margins: 2
+                          radius: Math.min(Style.radiusL, width / 2)
                           imagePath: MediaService.trackArtUrl
                           fallbackIcon: "disc"
                           fallbackIconSize: Style.fontSizeM
@@ -706,14 +770,14 @@ Loader {
 
                         NText {
                           text: {
-                            var temp = LocationService.data.weather.current_weather.temperature
-                            var suffix = "C"
+                            var temp = LocationService.data.weather.current_weather.temperature;
+                            var suffix = "C";
                             if (Settings.data.location.useFahrenheit) {
-                              temp = LocationService.celsiusToFahrenheit(temp)
-                              suffix = "F"
+                              temp = LocationService.celsiusToFahrenheit(temp);
+                              suffix = "F";
                             }
-                            temp = Math.round(temp)
-                            return temp + "°" + suffix
+                            temp = Math.round(temp);
+                            return temp + "°" + suffix;
                           }
                           pointSize: Style.fontSizeXL
                           font.weight: Style.fontWeightBold
@@ -722,14 +786,14 @@ Loader {
 
                         NText {
                           text: {
-                            var wind = LocationService.data.weather.current_weather.windspeed
-                            var unit = "km/h"
+                            var wind = LocationService.data.weather.current_weather.windspeed;
+                            var unit = "km/h";
                             if (Settings.data.location.useFahrenheit) {
-                              wind = wind * 0.621371 // Convert km/h to mph
-                              unit = "mph"
+                              wind = wind * 0.621371; // Convert km/h to mph
+                              unit = "mph";
                             }
-                            wind = Math.round(wind)
-                            return wind + " " + unit
+                            wind = Math.round(wind);
+                            return wind + " " + unit;
                           }
                           pointSize: Style.fontSizeM
                           color: Color.mOnSurfaceVariant
@@ -756,7 +820,7 @@ Loader {
                     }
                   }
 
-                  // 3-day forecast
+                  // Forecast
                   RowLayout {
                     visible: Settings.data.location.weatherEnabled && LocationService.data.weather !== null
                     Layout.preferredWidth: 260
@@ -764,15 +828,15 @@ Loader {
                     spacing: 4
 
                     Repeater {
-                      model: 3
+                      model: MediaService.currentPlayer && MediaService.canPlay ? 3 : 4
                       delegate: ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 3
 
                         NText {
                           text: {
-                            var weatherDate = new Date(LocationService.data.weather.daily.time[index].replace(/-/g, "/"))
-                            return I18n.locale.toString(weatherDate, "ddd")
+                            var weatherDate = new Date(LocationService.data.weather.daily.time[index].replace(/-/g, "/"));
+                            return I18n.locale.toString(weatherDate, "ddd");
                           }
                           pointSize: Style.fontSizeM
                           color: Color.mOnSurfaceVariant
@@ -789,15 +853,15 @@ Loader {
 
                         NText {
                           text: {
-                            var max = LocationService.data.weather.daily.temperature_2m_max[index]
-                            var min = LocationService.data.weather.daily.temperature_2m_min[index]
+                            var max = LocationService.data.weather.daily.temperature_2m_max[index];
+                            var min = LocationService.data.weather.daily.temperature_2m_min[index];
                             if (Settings.data.location.useFahrenheit) {
-                              max = LocationService.celsiusToFahrenheit(max)
-                              min = LocationService.celsiusToFahrenheit(min)
+                              max = LocationService.celsiusToFahrenheit(max);
+                              min = LocationService.celsiusToFahrenheit(min);
                             }
-                            max = Math.round(max)
-                            min = Math.round(min)
-                            return max + "°/" + min + "°"
+                            max = Math.round(max);
+                            min = Math.round(min);
+                            return max + "°/" + min + "°";
                           }
                           pointSize: Style.fontSizeM
                           font.weight: Style.fontWeightMedium
@@ -811,34 +875,29 @@ Loader {
 
                   Item {
                     Layout.fillWidth: true
-                    visible: !(Settings.data.location.weatherEnabled && LocationService.data.weather !== null)
-                    Layout.preferredWidth: visible ? 1 : 0
                   }
 
                   // Battery and Keyboard Layout (full mode only)
                   ColumnLayout {
-                    Layout.preferredWidth: 60
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     spacing: 8
 
                     // Battery
                     RowLayout {
                       spacing: 4
-                      visible: UPower.displayDevice && UPower.displayDevice.ready && UPower.displayDevice.isPresent
+                      visible: batteryIndicator.isReady
 
                       NIcon {
-                        icon: BatteryService.getIcon(Math.round(UPower.displayDevice.percentage * 100), UPower.displayDevice.state === UPowerDeviceState.Charging, true)
+                        icon: BatteryService.getIcon(Math.round(batteryIndicator.percent), batteryIndicator.charging, batteryIndicator.isReady)
                         pointSize: Style.fontSizeM
-                        color: UPower.displayDevice.state === UPowerDeviceState.Charging ? Color.mPrimary : Color.mOnSurfaceVariant
+                        color: batteryIndicator.charging ? Color.mPrimary : Color.mOnSurfaceVariant
                       }
 
                       NText {
-                        text: Math.round(UPower.displayDevice.percentage * 100) + "%"
+                        text: Math.round(batteryIndicator.percent) + "%"
                         color: Color.mOnSurfaceVariant
                         pointSize: Style.fontSizeM
                         font.weight: Font.Medium
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
                       }
                     }
 
@@ -877,7 +936,7 @@ Loader {
                   Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 48
-                    radius: 24
+                    radius: Style.radiusL
                     color: Color.mSurface
                     border.color: passwordInput.activeFocus ? Color.mPrimary : Qt.alpha(Color.mOutline, 0.3)
                     border.width: passwordInput.activeFocus ? 2 : 1
@@ -914,7 +973,7 @@ Loader {
 
                         Keys.onPressed: function (event) {
                           if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            lockContext.tryUnlock()
+                            lockContext.tryUnlock();
                           }
                         }
 
@@ -1012,8 +1071,8 @@ Loader {
                       anchors.verticalCenter: parent.verticalCenter
                       width: 36
                       height: 36
-                      radius: width * 0.5
-                      color: eyeButtonArea.containsMouse ? Qt.alpha(Color.mOnSurface, 0.1) : "transparent"
+                      radius: Math.min(Style.radiusL, width / 2)
+                      color: eyeButtonArea.containsMouse ? Color.mPrimary : Color.transparent
                       visible: passwordInput.text.length > 0
                       enabled: !lockContext.unlockInProgress
 
@@ -1021,13 +1080,21 @@ Loader {
                         anchors.centerIn: parent
                         icon: parent.parent.passwordVisible ? "eye-off" : "eye"
                         pointSize: Style.fontSizeM
-                        color: Color.mOnSurfaceVariant
+                        color: eyeButtonArea.containsMouse ? Color.mOnPrimary : Color.mOnSurfaceVariant
+
+                        Behavior on color {
+                          ColorAnimation {
+                            duration: 200
+                            easing.type: Easing.OutCubic
+                          }
+                        }
                       }
 
                       MouseArea {
                         id: eyeButtonArea
                         anchors.fill: parent
                         hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: parent.parent.passwordVisible = !parent.parent.passwordVisible
                       }
 
@@ -1047,24 +1114,39 @@ Loader {
                       anchors.verticalCenter: parent.verticalCenter
                       width: 36
                       height: 36
-                      radius: width * 0.5
-                      color: submitButtonArea.containsMouse ? Color.mPrimary : Qt.alpha(Color.mPrimary, 0.8)
+                      radius: Math.min(Style.radiusL, width / 2)
+                      color: submitButtonArea.containsMouse ? Color.mPrimary : Color.transparent
                       border.color: Color.mPrimary
-                      border.width: 1
+                      border.width: Style.borderS
                       enabled: !lockContext.unlockInProgress
 
                       NIcon {
                         anchors.centerIn: parent
                         icon: "arrow-forward"
                         pointSize: Style.fontSizeM
-                        color: Color.mOnPrimary
+                        color: submitButtonArea.containsMouse ? Color.mOnPrimary : Color.mPrimary
+
+                        Behavior on color {
+                          ColorAnimation {
+                            duration: 200
+                            easing.type: Easing.OutCubic
+                          }
+                        }
                       }
 
                       MouseArea {
                         id: submitButtonArea
                         anchors.fill: parent
                         hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: lockContext.tryUnlock()
+                      }
+
+                      Behavior on color {
+                        ColorAnimation {
+                          duration: 200
+                          easing.type: Easing.OutCubic
+                        }
                       }
                     }
 
@@ -1081,206 +1163,118 @@ Loader {
                   }
                 }
 
-                // System control buttons
+                // Session control buttons
                 RowLayout {
                   Layout.fillWidth: true
                   Layout.preferredHeight: Settings.data.general.compactLockScreen ? 36 : 48
-                  spacing: 10
+                  spacing: 0
+                  visible: Settings.data.general.showSessionButtonsOnLockScreen
 
                   Item {
                     Layout.preferredWidth: Style.marginM
                   }
 
-                  Rectangle {
+                  NButton {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Settings.data.general.compactLockScreen ? 36 : 48
-                    radius: Settings.data.general.compactLockScreen ? 18 : 24
-                    color: logoutButtonArea.containsMouse ? Color.mHover : "transparent"
-                    border.color: Color.mOutline
-                    border.width: 1
-
-                    RowLayout {
-                      anchors.centerIn: parent
-                      spacing: 6
-
-                      NIcon {
-                        icon: "logout"
-                        pointSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
-                        color: logoutButtonArea.containsMouse ? Color.mOnHover : Color.mOnSurfaceVariant
-                      }
-
-                      NText {
-                        text: I18n.tr("session-menu.logout")
-                        pointSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
-                        color: logoutButtonArea.containsMouse ? Color.mOnHover : Color.mOnSurfaceVariant
-                        font.weight: Font.Medium
-                      }
-                    }
-
-                    MouseArea {
-                      id: logoutButtonArea
-                      anchors.fill: parent
-                      hoverEnabled: true
-                      onClicked: CompositorService.logout()
-                    }
-
-                    Behavior on color {
-                      ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                      }
-                    }
-
-                    Behavior on border.color {
-                      ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                      }
-                    }
+                    icon: "logout"
+                    text: I18n.tr("session-menu.logout")
+                    outlined: true
+                    backgroundColor: Color.mOnSurfaceVariant
+                    textColor: Color.mOnPrimary
+                    hoverColor: Color.mPrimary
+                    fontSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
+                    iconSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
+                    fontWeight: Style.fontWeightMedium
+                    horizontalAlignment: Qt.AlignHCenter
+                    buttonRadius: Style.radiusL
+                    onClicked: CompositorService.logout()
                   }
 
-                  Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Settings.data.general.compactLockScreen ? 36 : 48
-                    radius: Settings.data.general.compactLockScreen ? 18 : 24
-                    color: suspendButtonArea.containsMouse ? Color.mHover : "transparent"
-                    border.color: Color.mOutline
-                    border.width: 1
-
-                    RowLayout {
-                      anchors.centerIn: parent
-                      spacing: 6
-
-                      NIcon {
-                        icon: "suspend"
-                        pointSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
-                        color: suspendButtonArea.containsMouse ? Color.mOnHover : Color.mOnSurfaceVariant
-                      }
-
-                      NText {
-                        text: I18n.tr("session-menu.suspend")
-                        pointSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
-                        color: suspendButtonArea.containsMouse ? Color.mOnHover : Color.mOnSurfaceVariant
-                        font.weight: Font.Medium
-                      }
-                    }
-
-                    MouseArea {
-                      id: suspendButtonArea
-                      anchors.fill: parent
-                      hoverEnabled: true
-                      onClicked: CompositorService.suspend()
-                    }
-
-                    Behavior on color {
-                      ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                      }
-                    }
-
-                    Behavior on border.color {
-                      ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                      }
-                    }
+                  Item {
+                    Layout.preferredWidth: 10
                   }
 
-                  Rectangle {
+                  NButton {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Settings.data.general.compactLockScreen ? 36 : 48
-                    radius: Settings.data.general.compactLockScreen ? 18 : 24
-                    color: rebootButtonArea.containsMouse ? Color.mHover : "transparent"
-                    border.color: Color.mOutline
-                    border.width: 1
-
-                    RowLayout {
-                      anchors.centerIn: parent
-                      spacing: 6
-
-                      NIcon {
-                        icon: "reboot"
-                        pointSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
-                        color: rebootButtonArea.containsMouse ? Color.mOnHover : Color.mOnSurfaceVariant
-                      }
-
-                      NText {
-                        text: I18n.tr("session-menu.reboot")
-                        pointSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
-                        color: rebootButtonArea.containsMouse ? Color.mOnHover : Color.mOnSurfaceVariant
-                        font.weight: Font.Medium
-                      }
-                    }
-
-                    MouseArea {
-                      id: rebootButtonArea
-                      anchors.fill: parent
-                      hoverEnabled: true
-                      onClicked: CompositorService.reboot()
-                    }
-
-                    Behavior on color {
-                      ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                      }
-                    }
-
-                    Behavior on border.color {
-                      ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                      }
-                    }
+                    icon: "suspend"
+                    text: I18n.tr("session-menu.suspend")
+                    outlined: true
+                    backgroundColor: Color.mOnSurfaceVariant
+                    textColor: Color.mOnPrimary
+                    hoverColor: Color.mPrimary
+                    fontSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
+                    iconSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
+                    fontWeight: Style.fontWeightMedium
+                    horizontalAlignment: Qt.AlignHCenter
+                    buttonRadius: Style.radiusL
+                    onClicked: CompositorService.suspend()
                   }
 
-                  Rectangle {
+                  Item {
+                    Layout.preferredWidth: 10
+                    visible: Settings.data.general.showHibernateOnLockScreen
+                  }
+
+                  NButton {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Settings.data.general.compactLockScreen ? 36 : 48
-                    radius: Settings.data.general.compactLockScreen ? 18 : 24
-                    color: shutdownButtonArea.containsMouse ? Color.mError : "transparent"
-                    border.color: shutdownButtonArea.containsMouse ? Color.mError : Color.mOutline
-                    border.width: 1
+                    icon: "hibernate"
+                    text: I18n.tr("session-menu.hibernate")
+                    outlined: true
+                    backgroundColor: Color.mOnSurfaceVariant
+                    textColor: Color.mOnPrimary
+                    hoverColor: Color.mPrimary
+                    fontSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
+                    iconSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
+                    fontWeight: Style.fontWeightMedium
+                    horizontalAlignment: Qt.AlignHCenter
+                    buttonRadius: Style.radiusL
+                    visible: Settings.data.general.showHibernateOnLockScreen
+                    onClicked: CompositorService.hibernate()
+                  }
 
-                    RowLayout {
-                      anchors.centerIn: parent
-                      spacing: 6
+                  Item {
+                    Layout.preferredWidth: 10
+                  }
 
-                      NIcon {
-                        icon: "shutdown"
-                        pointSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
-                        color: shutdownButtonArea.containsMouse ? Color.mOnError : Color.mOnSurfaceVariant
-                      }
+                  NButton {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Settings.data.general.compactLockScreen ? 36 : 48
+                    icon: "reboot"
+                    text: I18n.tr("session-menu.reboot")
+                    outlined: true
+                    backgroundColor: Color.mOnSurfaceVariant
+                    textColor: Color.mOnPrimary
+                    hoverColor: Color.mPrimary
+                    fontSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
+                    iconSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
+                    fontWeight: Style.fontWeightMedium
+                    horizontalAlignment: Qt.AlignHCenter
+                    buttonRadius: Style.radiusL
+                    onClicked: CompositorService.reboot()
+                  }
 
-                      NText {
-                        text: I18n.tr("session-menu.shutdown")
-                        color: shutdownButtonArea.containsMouse ? Color.mOnError : Color.mOnSurfaceVariant
-                        pointSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
-                        font.weight: Font.Medium
-                      }
-                    }
+                  Item {
+                    Layout.preferredWidth: 10
+                  }
 
-                    MouseArea {
-                      id: shutdownButtonArea
-                      anchors.fill: parent
-                      hoverEnabled: true
-                      onClicked: CompositorService.shutdown()
-                    }
-
-                    Behavior on color {
-                      ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                      }
-                    }
-
-                    Behavior on border.color {
-                      ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                      }
-                    }
+                  NButton {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Settings.data.general.compactLockScreen ? 36 : 48
+                    icon: "shutdown"
+                    text: I18n.tr("session-menu.shutdown")
+                    outlined: true
+                    backgroundColor: Color.mError
+                    textColor: Color.mOnError
+                    hoverColor: Color.mError
+                    fontSize: Settings.data.general.compactLockScreen ? Style.fontSizeS : Style.fontSizeM
+                    iconSize: Settings.data.general.compactLockScreen ? Style.fontSizeM : Style.fontSizeL
+                    fontWeight: Style.fontWeightMedium
+                    horizontalAlignment: Qt.AlignHCenter
+                    buttonRadius: Style.radiusL
+                    onClicked: CompositorService.shutdown()
                   }
 
                   Item {

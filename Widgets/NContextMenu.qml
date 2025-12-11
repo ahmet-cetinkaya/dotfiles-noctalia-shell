@@ -1,8 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects
 import qs.Commons
+import qs.Widgets
 
 Popup {
   id: root
@@ -18,22 +18,29 @@ Popup {
   width: 180
   padding: Style.marginS
 
-  background: Rectangle {
+  // Background rectangle without shadow
+  Rectangle {
+    id: backgroundRect
+    anchors.fill: parent
     color: Color.mSurfaceVariant
     border.color: Color.mOutline
     border.width: Style.borderS
-    radius: Style.radiusM
+    radius: Style.iRadiusM
+  }
 
-    // Hard shadow effect
-    layer.enabled: true
-    layer.effect: MultiEffect {
-      shadowEnabled: true
-      shadowBlur: 0.0  // Sharp shadow
-      shadowOpacity: 0.85
-      shadowColor: Color.mSecondary
-      shadowHorizontalOffset: 3
-      shadowVerticalOffset: 3
-    }
+  // Apply hard shadow using NDropShadow
+  NDropShadow {
+    id: shadowWrapper
+    anchors.fill: backgroundRect
+    source: backgroundRect
+    autoPaddingEnabled: true
+
+    // Override with hard shadow settings
+    shadowBlur: 0.0
+    shadowOpacity: 0.85
+    shadowColor: Color.mSecondary
+    shadowHorizontalOffset: 3
+    shadowVerticalOffset: 3
   }
 
   contentItem: NListView {
@@ -57,7 +64,7 @@ Popup {
 
       background: Rectangle {
         color: menuItem.hovered && menuItem.enabled ? Color.mHover : Color.transparent
-        radius: Style.radiusS
+        radius: Style.iRadiusS
 
         Behavior on color {
           ColorAnimation {
@@ -102,8 +109,8 @@ Popup {
 
       onClicked: {
         if (enabled) {
-          popup.triggered(modelData.action || modelData.key || index.toString())
-          popup.close()
+          popup.triggered(modelData.action || modelData.key || index.toString());
+          popup.close();
         }
       }
     }
@@ -111,14 +118,14 @@ Popup {
 
   // Helper function to open at mouse position
   function openAt(x, y) {
-    root.x = x
-    root.y = y
-    root.open()
+    root.x = x;
+    root.y = y;
+    root.open();
   }
 
   // Helper function to open at item
   function openAtItem(item, mouseX, mouseY) {
-    var pos = item.mapToItem(root.parent, mouseX || 0, mouseY || 0)
-    openAt(pos.x, pos.y)
+    var pos = item.mapToItem(root.parent, mouseX || 0, mouseY || 0);
+    openAt(pos.x, pos.y);
   }
 }

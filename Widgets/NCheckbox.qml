@@ -37,7 +37,7 @@ RowLayout {
 
     implicitWidth: Math.round(root.baseSize)
     implicitHeight: Math.round(root.baseSize)
-    radius: Style.radiusXS
+    radius: Style.iRadiusXS
     color: root.checked ? root.activeColor : Color.mSurface
     border.color: Color.mOutline
     border.width: Style.borderS
@@ -68,12 +68,12 @@ RowLayout {
       cursorShape: Qt.PointingHandCursor
       hoverEnabled: true
       onEntered: {
-        hovering = true
-        root.entered()
+        hovering = true;
+        root.entered();
       }
       onExited: {
-        hovering = false
-        root.exited()
+        hovering = false;
+        root.exited();
       }
       onClicked: root.toggled(!root.checked)
     }

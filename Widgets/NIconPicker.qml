@@ -23,23 +23,23 @@ Popup {
   property var allIcons: Object.keys(Icons.icons)
   property var filteredIcons: {
     if (query === "")
-      return allIcons
-    var q = query.toLowerCase()
-    return allIcons.filter(name => name.toLowerCase().includes(q))
+      return allIcons;
+    var q = query.toLowerCase();
+    return allIcons.filter(name => name.toLowerCase().includes(q));
   }
   readonly property int columns: 6
   readonly property int cellW: Math.floor(grid.width / columns)
   readonly property int cellH: Math.round(cellW * 0.7 + 36)
 
   onOpened: {
-    selectedIcon = initialIcon
-    query = initialIcon
-    searchInput.forceActiveFocus()
+    selectedIcon = initialIcon;
+    query = initialIcon;
+    searchInput.forceActiveFocus();
   }
 
   background: Rectangle {
     color: Color.mSurface
-    radius: Style.radiusL
+    radius: Style.iRadiusL
     border.color: Color.mPrimary
     border.width: Style.borderM
   }
@@ -60,6 +60,7 @@ Popup {
       }
       NIconButton {
         icon: "close"
+        tooltipText: I18n.tr("tooltips.close")
         onClicked: root.close()
       }
     }
@@ -82,7 +83,7 @@ Popup {
     }
 
     // Icon grid
-    GridView {
+    NGridView {
       id: grid
       Layout.fillWidth: true
       Layout.fillHeight: true
@@ -90,24 +91,22 @@ Popup {
       cellWidth: root.cellW
       cellHeight: root.cellH
       model: root.filteredIcons
-      clip: true
-      reuseItems: true
       delegate: Rectangle {
         width: grid.cellWidth
         height: grid.cellHeight
-        radius: Style.radiusS
+        radius: Style.iRadiusS
 
         color: (root.selectedIcon === modelData) ? Qt.alpha(Color.mPrimary, 0.15) : Color.transparent
-        border.color: (root.selectedIcon === modelData) ? Color.mPrimary : Qt.rgba(0, 0, 0, 0)
+        border.color: (root.selectedIcon === modelData) ? Color.mPrimary : Color.transparent
         border.width: (root.selectedIcon === modelData) ? Style.borderS : 0
 
         MouseArea {
           anchors.fill: parent
           onClicked: root.selectedIcon = modelData
           onDoubleClicked: {
-            root.selectedIcon = modelData
-            root.iconSelected(root.selectedIcon)
-            root.close()
+            root.selectedIcon = modelData;
+            root.iconSelected(root.selectedIcon);
+            root.close();
           }
         }
 
@@ -159,8 +158,8 @@ Popup {
         icon: "check"
         enabled: root.selectedIcon !== ""
         onClicked: {
-          root.iconSelected(root.selectedIcon)
-          root.close()
+          root.iconSelected(root.selectedIcon);
+          root.close();
         }
       }
     }

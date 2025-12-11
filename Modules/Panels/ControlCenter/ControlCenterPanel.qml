@@ -3,8 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import qs.Commons
+import qs.Modules.Cards
 import qs.Modules.MainScreen
-import qs.Modules.Panels.ControlCenter.Cards
 import qs.Services.Media
 import qs.Services.UI
 import qs.Widgets
@@ -17,8 +17,8 @@ SmartPanel {
 
   // Check if there's a bar on this screen
   readonly property bool hasBarOnScreen: {
-    var monitors = Settings.data.bar.monitors || []
-    return monitors.length === 0 || monitors.includes(screen?.name)
+    var monitors = Settings.data.bar.monitors || [];
+    return monitors.length === 0 || monitors.includes(screen?.name);
   }
 
   // When position is "close_to_bar_button" but there's no bar, fall back to center
@@ -31,55 +31,55 @@ SmartPanel {
   panelAnchorBottom: !shouldCenter && controlCenterPosition !== "close_to_bar_button" && controlCenterPosition.startsWith("bottom_")
   panelAnchorTop: !shouldCenter && controlCenterPosition !== "close_to_bar_button" && controlCenterPosition.startsWith("top_")
 
-  preferredWidth: Math.round(460 * Style.uiScaleRatio)
+  preferredWidth: Math.round(420 * Style.uiScaleRatio)
   preferredHeight: {
-    var height = 0
-    var count = 0
+    var height = 0;
+    var count = 0;
     for (var i = 0; i < Settings.data.controlCenter.cards.length; i++) {
-      const card = Settings.data.controlCenter.cards[i]
+      const card = Settings.data.controlCenter.cards[i];
       if (!card.enabled)
-        continue
-
-      const contributes = (card.id !== "weather-card" || Settings.data.location.weatherEnabled)
+        continue;
+      const contributes = (card.id !== "weather-card" || Settings.data.location.weatherEnabled);
       if (!contributes)
-        continue
-
-      count++
+        continue;
+      count++;
       switch (card.id) {
       case "profile-card":
-        height += profileHeight
-        break
+        height += profileHeight;
+        break;
       case "shortcuts-card":
-        height += shortcutsHeight
-        break
+        height += shortcutsHeight;
+        break;
       case "audio-card":
-        height += audioHeight
-        break
+        height += audioHeight;
+        break;
       case "weather-card":
-        height += weatherHeight
-        break
+        height += weatherHeight;
+        break;
       case "media-sysmon-card":
-        height += mediaSysMonHeight
-        break
+        height += mediaSysMonHeight;
+        break;
       default:
-        break
+        break;
       }
     }
-    return height + (count + 1) * Style.marginL
+    return height + (count + 1) * Style.marginL;
   }
 
   readonly property int profileHeight: Math.round(64 * Style.uiScaleRatio)
   readonly property int shortcutsHeight: Math.round(52 * Style.uiScaleRatio)
   readonly property int audioHeight: Math.round(60 * Style.uiScaleRatio)
-  readonly property int weatherHeight: Math.round(190 * Style.uiScaleRatio)
   readonly property int mediaSysMonHeight: Math.round(260 * Style.uiScaleRatio)
 
+  // We keep a dynamic weather height due to a more complex layout and font scaling
+  property int weatherHeight: Math.round(210 * Style.uiScaleRatio)
+
   onOpened: {
-    MediaService.autoSwitchingPaused = true
+    MediaService.autoSwitchingPaused = true;
   }
 
   onClosed: {
-    MediaService.autoSwitchingPaused = false
+    MediaService.autoSwitchingPaused = false;
   }
 
   panelContent: Item {
@@ -101,31 +101,31 @@ SmartPanel {
           Layout.preferredHeight: {
             switch (modelData.id) {
             case "profile-card":
-              return profileHeight
+              return profileHeight;
             case "shortcuts-card":
-              return shortcutsHeight
+              return shortcutsHeight;
             case "audio-card":
-              return audioHeight
+              return audioHeight;
             case "weather-card":
-              return weatherHeight
+              return weatherHeight;
             case "media-sysmon-card":
-              return mediaSysMonHeight
+              return mediaSysMonHeight;
             default:
-              return 0
+              return 0;
             }
           }
           sourceComponent: {
             switch (modelData.id) {
             case "profile-card":
-              return profileCard
+              return profileCard;
             case "shortcuts-card":
-              return shortcutsCard
+              return shortcutsCard;
             case "audio-card":
-              return audioCard
+              return audioCard;
             case "weather-card":
-              return weatherCard
+              return weatherCard;
             case "media-sysmon-card":
-              return mediaSysMonCard
+              return mediaSysMonCard;
             }
           }
         }
@@ -149,7 +149,11 @@ SmartPanel {
 
     Component {
       id: weatherCard
-      WeatherCard {}
+      WeatherCard {
+        Component.onCompleted: {
+          root.weatherHeight = this.height;
+        }
+      }
     }
 
     Component {

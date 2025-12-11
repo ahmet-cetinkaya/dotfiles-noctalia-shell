@@ -3,8 +3,8 @@ import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
 import qs.Commons
-import qs.Widgets
 import qs.Services.UI
+import qs.Widgets
 
 // Widget Settings Dialog Component
 Popup {
@@ -27,8 +27,10 @@ Popup {
   onOpened: {
     // Load settings when popup opens with data
     if (widgetData && widgetId) {
-      loadWidgetSettings()
+      loadWidgetSettings();
     }
+    // Request focus to ensure keyboard input works
+    forceActiveFocus();
   }
 
   background: Rectangle {
@@ -40,71 +42,108 @@ Popup {
     border.width: Style.borderM
   }
 
-  contentItem: ColumnLayout {
-    id: content
+  contentItem: FocusScope {
+    id: focusScope
+    focus: true
 
-    width: parent.width
-    spacing: Style.marginM
-
-    // Title
-    RowLayout {
-      Layout.fillWidth: true
-
-      NText {
-        text: I18n.tr("system.widget-settings-title", {
-                        "widget": root.widgetId
-                      })
-        pointSize: Style.fontSizeL
-        font.weight: Style.fontWeightBold
-        color: Color.mPrimary
-        Layout.fillWidth: true
-      }
-
-      NIconButton {
-        icon: "close"
-        tooltipText: I18n.tr("tooltips.close")
-        onClicked: root.close()
-      }
-    }
-
-    // Separator
-    Rectangle {
-      Layout.fillWidth: true
-      Layout.preferredHeight: 1
-      color: Color.mOutline
-    }
-
-    // Settings based on widget type
-    // Will be triggered via settingsLoader.setSource()
-    Loader {
-      id: settingsLoader
-      Layout.fillWidth: true
-    }
-
-    // Action buttons
-    RowLayout {
-      Layout.fillWidth: true
-      Layout.topMargin: Style.marginM
+    ColumnLayout {
+      id: content
+      anchors.fill: parent
       spacing: Style.marginM
 
-      Item {
+      // Title
+      RowLayout {
         Layout.fillWidth: true
+
+        NText {
+          text: I18n.tr("system.widget-settings-title", {
+                          "widget": root.widgetId
+                        })
+          pointSize: Style.fontSizeL
+          font.weight: Style.fontWeightBold
+          color: Color.mPrimary
+          Layout.fillWidth: true
+        }
+
+        NIconButton {
+          icon: "close"
+          tooltipText: I18n.tr("tooltips.close")
+          onClicked: root.close()
+        }
       }
 
-      NButton {
-        text: I18n.tr("bar.widget-settings.dialog.cancel")
-        outlined: true
-        onClicked: root.close()
+      // Separator
+      Rectangle {
+        Layout.fillWidth: true
+        Layout.preferredHeight: 1
+        color: Color.mOutline
       }
 
-      NButton {
-        text: I18n.tr("bar.widget-settings.dialog.apply")
-        icon: "check"
-        onClicked: {
-          if (settingsLoader.item && settingsLoader.item.saveSettings) {
-            var newSettings = settingsLoader.item.saveSettings()
-            root.updateWidgetSettings(root.sectionId, root.widgetIndex, newSettings)
-            root.close()
+      // Settings based on widget type
+      // Will be triggered via settingsLoader.setSource()
+      Loader {
+        id: settingsLoader
+        Layout.fillWidth: true
+        onLoaded: {
+          // Try to focus the first focusable item in the loaded settings
+          if (item) {
+            Qt.callLater(() => {
+                           var firstInput = findFirstFocusable(item);
+                           if (firstInput) {
+                             firstInput.forceActiveFocus();
+                           } else {
+                             focusScope.forceActiveFocus();
+                           }
+                         });
+          }
+        }
+
+        function findFirstFocusable(item) {
+          if (!item)
+            return null;
+          // Check if this item can accept focus
+          if (item.focus !== undefined && item.focus === true)
+            return item;
+          // Check children
+          if (item.children) {
+            for (var i = 0; i < item.children.length; i++) {
+              var child = item.children[i];
+              if (child && child.focus !== undefined && child.focus === true)
+                return child;
+              var found = findFirstFocusable(child);
+              if (found)
+                return found;
+            }
+          }
+          return null;
+        }
+      }
+
+      // Action buttons
+      RowLayout {
+        Layout.fillWidth: true
+        Layout.topMargin: Style.marginM
+        spacing: Style.marginM
+
+        Item {
+          Layout.fillWidth: true
+        }
+
+        NButton {
+          text: I18n.tr("bar.widget-settings.dialog.cancel")
+          outlined: true
+          onClicked: root.close()
+        }
+
+        NButton {
+          text: I18n.tr("bar.widget-settings.dialog.apply")
+          icon: "check"
+          onClicked: {
+            if (settingsLoader.item && settingsLoader.item.saveSettings) {
+              var newSettings = settingsLoader.item.saveSettings();
+              root.updateWidgetSettings(root.sectionId, root.widgetIndex, newSettings);
+              root.close();
+            }
           }
         }
       }
@@ -112,37 +151,19 @@ Popup {
   }
 
   function loadWidgetSettings() {
-    const widgetSettingsMap = {
-      "ActiveWindow": "WidgetSettings/ActiveWindowSettings.qml",
-      "AudioVisualizer": "WidgetSettings/AudioVisualizerSettings.qml",
-      "Battery": "WidgetSettings/BatterySettings.qml",
-      "Bluetooth": "WidgetSettings/BluetoothSettings.qml",
-      "Brightness": "WidgetSettings/BrightnessSettings.qml",
-      "Clock": "WidgetSettings/ClockSettings.qml",
-      "ControlCenter": "WidgetSettings/ControlCenterSettings.qml",
-      "CustomButton": "WidgetSettings/CustomButtonSettings.qml",
-      "KeyboardLayout": "WidgetSettings/KeyboardLayoutSettings.qml",
-      "LockKeys": "WidgetSettings/LockKeysSettings.qml",
-      "MediaMini": "WidgetSettings/MediaMiniSettings.qml",
-      "Microphone": "WidgetSettings/MicrophoneSettings.qml",
-      "NotificationHistory": "WidgetSettings/NotificationHistorySettings.qml",
-      "Spacer": "WidgetSettings/SpacerSettings.qml",
-      "SystemMonitor": "WidgetSettings/SystemMonitorSettings.qml",
-      "TaskbarGrouped": "WidgetSettings/TaskbarGroupedSettings.qml",
-      "Volume": "WidgetSettings/VolumeSettings.qml",
-      "WiFi": "WidgetSettings/WiFiSettings.qml",
-      "Workspace": "WidgetSettings/WorkspaceSettings.qml",
-      "Taskbar": "WidgetSettings/TaskbarSettings.qml",
-      "Tray": "WidgetSettings/TraySettings.qml"
-    }
-
-    const source = widgetSettingsMap[widgetId]
+    const source = BarWidgetRegistry.widgetSettingsMap[widgetId];
     if (source) {
-      // Use setSource to pass properties at creation time
+      var currentWidgetData = widgetData;
+      if (sectionId && widgetIndex >= 0) {
+        var widgets = Settings.data.bar.widgets[sectionId];
+        if (widgets && widgetIndex < widgets.length) {
+          currentWidgetData = widgets[widgetIndex];
+        }
+      }
       settingsLoader.setSource(source, {
-                                 "widgetData": widgetData,
+                                 "widgetData": currentWidgetData,
                                  "widgetMetadata": BarWidgetRegistry.widgetMetadata[widgetId]
-                               })
+                               });
     }
   }
 }

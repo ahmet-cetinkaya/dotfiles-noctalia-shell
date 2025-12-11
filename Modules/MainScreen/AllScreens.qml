@@ -3,8 +3,9 @@ import Quickshell
 import Quickshell.Wayland
 
 import qs.Commons
-import qs.Services.UI
 import qs.Modules.MainScreen
+import qs.Services.Noctalia
+import qs.Services.UI
 
 // ------------------------------
 // MainScreen for each screen (manages bar + all panels)
@@ -16,24 +17,35 @@ Variants {
 
     property bool shouldBeActive: {
       if (!modelData || !modelData.name) {
-        return false
+        return false;
       }
-      Logger.d("Shell", "MainScreen activated for", modelData?.name)
-      return true
+
+      let shouldLoad = true;
+      if (!Settings.data.general.allowPanelsOnScreenWithoutBar) {
+        // Check if bar is configured for this screen
+        var monitors = Settings.data.bar.monitors || [];
+        shouldLoad = monitors.length === 0 || monitors.includes(modelData?.name);
+      }
+
+      if (shouldLoad) {
+        Logger.d("AllScreens", "Screen activated: ", modelData?.name);
+      }
+      return shouldLoad;
     }
 
     property bool windowLoaded: false
 
+    // Main Screen loader - Bar and panels backgrounds
     Loader {
       id: windowLoader
-      active: parent.shouldBeActive
+      active: parent.shouldBeActive && PluginService.pluginsFullyLoaded
       asynchronous: false
 
       property ShellScreen loaderScreen: modelData
 
       onLoaded: {
         // Signal that window is loaded so exclusion zone can be created
-        parent.windowLoaded = true
+        parent.windowLoaded = true;
       }
 
       sourceComponent: MainScreen {
@@ -45,11 +57,11 @@ Variants {
     Loader {
       active: {
         if (!parent.windowLoaded || !parent.shouldBeActive || !BarService.isVisible)
-          return false
+          return false;
 
         // Check if bar is configured for this screen
-        var monitors = Settings.data.bar.monitors || []
-        return monitors.length === 0 || monitors.includes(modelData?.name)
+        var monitors = Settings.data.bar.monitors || [];
+        return monitors.length === 0 || monitors.includes(modelData?.name);
       }
       asynchronous: false
 
@@ -58,7 +70,7 @@ Variants {
       }
 
       onLoaded: {
-        Logger.d("Shell", "BarContentWindow created for", modelData?.name)
+        Logger.d("AllScreens", "BarContentWindow created for", modelData?.name);
       }
     }
 
@@ -67,11 +79,11 @@ Variants {
     Loader {
       active: {
         if (!parent.windowLoaded || !parent.shouldBeActive || !BarService.isVisible)
-          return false
+          return false;
 
         // Check if bar is configured for this screen
-        var monitors = Settings.data.bar.monitors || []
-        return monitors.length === 0 || monitors.includes(modelData?.name)
+        var monitors = Settings.data.bar.monitors || [];
+        return monitors.length === 0 || monitors.includes(modelData?.name);
       }
       asynchronous: false
 
@@ -80,7 +92,29 @@ Variants {
       }
 
       onLoaded: {
-        Logger.d("Shell", "BarExclusionZone created for", modelData?.name)
+        Logger.d("AllScreens", "BarExclusionZone created for", modelData?.name);
+      }
+    }
+
+    // PopupMenuWindow - reusable popup window for both tray menus and context menus
+    // Disabled when bar is hidden or not configured for this screen
+    Loader {
+      active: {
+        if (!parent.windowLoaded || !parent.shouldBeActive || !BarService.isVisible)
+          return false;
+
+        // Check if bar is configured for this screen
+        var monitors = Settings.data.bar.monitors || [];
+        return monitors.length === 0 || monitors.includes(modelData?.name);
+      }
+      asynchronous: false
+
+      sourceComponent: PopupMenuWindow {
+        screen: modelData
+      }
+
+      onLoaded: {
+        Logger.d("AllScreens", "PopupMenuWindow created for", modelData?.name);
       }
     }
   }

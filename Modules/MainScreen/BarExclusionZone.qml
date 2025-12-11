@@ -3,13 +3,12 @@ import Quickshell
 import Quickshell.Wayland
 import qs.Commons
 
-
 /**
- * BarExclusionZone - Invisible PanelWindow that reserves exclusive space for the bar
- *
- * This is a minimal window that works with the compositor to reserve space,
- * while the actual bar UI is rendered in MainScreen.
- */
+* BarExclusionZone - Invisible PanelWindow that reserves exclusive space for the bar
+*
+* This is a minimal window that works with the compositor to reserve space,
+* while the actual bar UI is rendered in MainScreen.
+*/
 PanelWindow {
   id: root
 
@@ -18,8 +17,8 @@ PanelWindow {
   readonly property string barPosition: Settings.data.bar.position || "top"
   readonly property bool barIsVertical: barPosition === "left" || barPosition === "right"
   readonly property bool barFloating: Settings.data.bar.floating || false
-  readonly property real barMarginH: barFloating ? Settings.data.bar.marginHorizontal * Style.marginXL : 0
-  readonly property real barMarginV: barFloating ? Settings.data.bar.marginVertical * Style.marginXL : 0
+  readonly property real barMarginH: barFloating ? Math.ceil(Settings.data.bar.marginHorizontal * Style.marginXL) : 0
+  readonly property real barMarginV: barFloating ? Math.ceil(Settings.data.bar.marginVertical * Style.marginXL) : 0
 
   // Invisible - just reserves space
   color: "transparent"
@@ -46,11 +45,11 @@ PanelWindow {
       // Vertical bar: reserve bar height + margin on the anchored edge only
       if (barFloating) {
         // For left bar, reserve left margin; for right bar, reserve right margin
-        return Style.barHeight + barMarginH
+        return Style.barHeight + barMarginH + 1;
       }
-      return Style.barHeight
+      return Style.barHeight + 1;
     }
-    return 0 // Auto-width when left/right anchors are true
+    return 0; // Auto-width when left/right anchors are true
   }
 
   implicitHeight: {
@@ -58,17 +57,14 @@ PanelWindow {
       // Horizontal bar: reserve bar height + margin on the anchored edge only
       if (barFloating) {
         // For top bar, reserve top margin; for bottom bar, reserve bottom margin
-        return Style.barHeight + barMarginV
+        return Style.barHeight + barMarginV + 1;
       }
-      return Style.barHeight
+      return Style.barHeight + 1;
     }
-    return 0 // Auto-height when top/bottom anchors are true
+    return 0; // Auto-height when top/bottom anchors are true
   }
 
   Component.onCompleted: {
-    Logger.d("BarExclusionZone", "Created for screen:", screen?.name)
-    Logger.d("BarExclusionZone", "  Position:", barPosition, "Exclusive:", exclusive, "Floating:", barFloating)
-    Logger.d("BarExclusionZone", "  Anchors - top:", anchors.top, "bottom:", anchors.bottom, "left:", anchors.left, "right:", anchors.right)
-    Logger.d("BarExclusionZone", "  Size:", width, "x", height, "implicitWidth:", implicitWidth, "implicitHeight:", implicitHeight)
+    Logger.d("BarExclusionZone", "Created for screen:", screen?.name);
   }
 }

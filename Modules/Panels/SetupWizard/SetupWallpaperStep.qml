@@ -1,13 +1,13 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
 import QtQuick.Effects
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "../../../Helpers/FuzzySort.js" as FuzzySort
 import qs.Commons
 import qs.Services.UI
 import qs.Widgets
-import "../../../Helpers/FuzzySort.js" as FuzzySort
 
 ColumnLayout {
   id: root
@@ -63,102 +63,28 @@ ColumnLayout {
     }
   }
 
-  // Large preview with rounded corners and shadow effect
+  // Large preview area
   Rectangle {
     Layout.fillWidth: true
     Layout.fillHeight: true
     Layout.minimumHeight: 180
     color: Color.mSurfaceVariant
     radius: Style.radiusL
-    border.color: selectedWallpaper !== "" ? Color.mPrimary : Color.mOutline
-    border.width: selectedWallpaper !== "" ? 2 : 1
-    clip: true
 
-    // Mirror WallpaperPanel approach with rounded shader mask
-    NImageCached {
-      id: previewCached
+    // Image with rounded corners
+    NImageRounded {
       anchors.fill: parent
-      anchors.margins: 4
-      maxCacheDimension: 512
-      cacheFolder: Settings.cacheDirImagesWallpapers
+      visible: selectedWallpaper !== ""
       imagePath: selectedWallpaper !== "" ? "file://" + selectedWallpaper : ""
-      visible: false // used as texture source for the shader
-    }
-
-    ShaderEffect {
-      anchors.fill: parent
-      anchors.margins: 4
-      property var source: ShaderEffectSource {
-        sourceItem: previewCached
-        hideSource: true
-        live: true
-        recursive: false
-        format: ShaderEffectSource.RGBA
-      }
-      property real itemWidth: width
-      property real itemHeight: height
-      property real cornerRadius: Style.radiusL
-      property real imageOpacity: 1.0
-      fragmentShader: Qt.resolvedUrl(Quickshell.shellDir + "/Shaders/qsb/rounded_image.frag.qsb")
-      supportsAtlasTextures: false
-      blending: true
-    }
-
-    // Loading placeholder
-    Rectangle {
-      anchors.fill: parent
-      color: Color.mSurfaceVariant
       radius: Style.radiusL
-      visible: (previewCached.status === Image.Loading || previewCached.status === Image.Null) && selectedWallpaper !== ""
-
-      NIcon {
-        icon: "image"
-        pointSize: Style.fontSizeXXL
-        color: Color.mOnSurfaceVariant
-        anchors.centerIn: parent
-      }
-    }
-
-    // Error placeholder
-    Rectangle {
-      anchors.fill: parent
-      color: Color.mError
-      opacity: 0.1
-      radius: Style.radiusL
-      visible: previewCached.status === Image.Error && selectedWallpaper !== ""
-
-      ColumnLayout {
-        anchors.centerIn: parent
-        spacing: Style.marginS
-
-        NIcon {
-          icon: "alert-circle"
-          pointSize: Style.fontSizeXXL
-          color: Color.mError
-          Layout.alignment: Qt.AlignHCenter
-        }
-
-        NText {
-          text: I18n.tr("setup.wallpaper.preview-error")
-          pointSize: Style.fontSizeS
-          color: Color.mError
-          Layout.alignment: Qt.AlignHCenter
-        }
-      }
-    }
-
-    NBusyIndicator {
-      anchors.centerIn: parent
-      visible: (previewCached.status === Image.Loading || previewCached.status === Image.Null) && selectedWallpaper !== ""
-      running: visible
-      size: 28
+      borderColor: selectedWallpaper !== "" ? Color.mPrimary : Color.mOutline
+      borderWidth: selectedWallpaper !== "" ? 2 : 1
     }
 
     ColumnLayout {
       anchors.centerIn: parent
       spacing: Style.marginL
       visible: selectedWallpaper === ""
-      opacity: 0.6
 
       Rectangle {
         Layout.alignment: Qt.AlignHCenter
@@ -166,12 +92,11 @@ ColumnLayout {
         height: 64
         radius: width / 2
         color: Color.mPrimary
-        opacity: 0.15
 
         NIcon {
           icon: "sparkles"
           pointSize: Style.fontSizeXXL
-          color: Color.mPrimary
+          color: Color.mOnPrimary
           anchors.centerIn: parent
         }
       }
@@ -195,7 +120,7 @@ ColumnLayout {
   // Wallpaper gallery strip
   Item {
     Layout.fillWidth: true
-    Layout.preferredHeight: 90
+    Layout.preferredHeight: 88
     visible: filteredWallpapers.length > 0
 
     ScrollView {
@@ -210,20 +135,20 @@ ColumnLayout {
         target: galleryScroll.contentItem
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: event => {
-                   const flick = galleryScroll.contentItem
+                   const flick = galleryScroll.contentItem;
                    if (!flick)
-                   return
-                   const delta = event.pixelDelta.x !== 0 || event.pixelDelta.y !== 0 ? (event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.pixelDelta.x) : (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x)
+                   return;
+                   const delta = event.pixelDelta.x !== 0 || event.pixelDelta.y !== 0 ? (event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.pixelDelta.x) : (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
                    // Move opposite of wheel to scroll content to the right for wheel down
-                   const step = -delta
-                   const maxX = Math.max(0, flick.contentWidth - flick.width)
-                   let newX = flick.contentX + step
+                   const step = -delta;
+                   const maxX = Math.max(0, flick.contentWidth - flick.width);
+                   let newX = flick.contentX + step;
                    if (newX < 0)
-                   newX = 0
+                   newX = 0;
                    if (newX > maxX)
-                   newX = maxX
-                   flick.contentX = newX
-                   event.accepted = true
+                   newX = maxX;
+                   flick.contentX = newX;
+                   event.accepted = true;
                  }
       }
 
@@ -233,50 +158,36 @@ ColumnLayout {
 
         Repeater {
           model: filteredWallpapers
-          delegate: Rectangle {
-            Layout.preferredWidth: 120
-            Layout.preferredHeight: 80
-            color: Color.mSurface
-            radius: Style.radiusM
-            border.color: selectedWallpaper === modelData ? Color.mPrimary : Color.mOutline
-            border.width: selectedWallpaper === modelData ? 2 : 1
-            clip: true
+          delegate: Item {
+            readonly property int borderWidth: Style.borderM
+            readonly property int imageMargin: 1
+            readonly property int baseWidth: 120
+            readonly property int baseHeight: 80
 
-            // Cached thumbnail (used as shader source)
-            NImageCached {
-              id: thumbCached
-              anchors.fill: parent
-              anchors.margins: 3
-              maxCacheDimension: 256
-              cacheFolder: Settings.cacheDirImagesWallpapers
-              imagePath: "file://" + modelData
-              visible: false
-            }
+            Layout.preferredWidth: baseWidth + (borderWidth + imageMargin) * 2
+            Layout.preferredHeight: baseHeight + (borderWidth + imageMargin) * 2
 
-            ShaderEffect {
+            // Border container with proper spacing to prevent clipping
+            Rectangle {
               anchors.fill: parent
-              anchors.margins: 3
-              property var source: ShaderEffectSource {
-                sourceItem: thumbCached
-                hideSource: true
-                live: true
-                recursive: false
-                format: ShaderEffectSource.RGBA
+              anchors.margins: imageMargin
+              color: Color.transparent
+              border.color: selectedWallpaper === modelData ? Color.mPrimary : Color.mOutline
+              border.width: borderWidth
+
+              // Cached thumbnail
+              NImageCached {
+                id: thumbCached
+                anchors.fill: parent
+                anchors.margins: borderWidth
+                source: "file://" + modelData
               }
-              property real itemWidth: width
-              property real itemHeight: height
-              property real cornerRadius: Style.radiusM - 3
-              property real imageOpacity: 1.0
-              fragmentShader: Qt.resolvedUrl(Quickshell.shellDir + "/Shaders/qsb/rounded_image.frag.qsb")
-              supportsAtlasTextures: false
-              blending: true
             }
 
             // Loading state
             Rectangle {
               anchors.fill: parent
               color: Color.mSurfaceVariant
-              radius: Style.radiusM
               visible: thumbCached.status === Image.Loading
 
               NIcon {
@@ -313,7 +224,6 @@ ColumnLayout {
               anchors.fill: parent
               color: Color.mPrimary
               opacity: hoverHandler.hovered ? 0.1 : 0
-              radius: Style.radiusM
               Behavior on opacity {
                 NumberAnimation {
                   duration: Style.animationFast
@@ -345,8 +255,8 @@ ColumnLayout {
 
             TapHandler {
               onTapped: {
-                selectedWallpaper = modelData
-                wallpaperChanged(modelData)
+                selectedWallpaper = modelData;
+                wallpaperChanged(modelData);
               }
             }
           }
@@ -412,8 +322,8 @@ ColumnLayout {
       buttonTooltip: I18n.tr("setup.wallpaper.dir.browse")
       Layout.fillWidth: true
       onInputEditingFinished: {
-        selectedDirectory = text
-        directoryChanged(text)
+        selectedDirectory = text;
+        directoryChanged(text);
       }
       onButtonClicked: directoryPicker.open()
     }
@@ -424,41 +334,41 @@ ColumnLayout {
   property list<string> filteredWallpapers: []
 
   function updateFilteredWallpapers() {
-    filteredWallpapers = wallpapersList
+    filteredWallpapers = wallpapersList;
   }
 
   function refreshWallpapers() {
     if (!selectedDirectory || selectedDirectory === "") {
-      wallpapersList = []
-      filteredWallpapers = []
-      return
+      wallpapersList = [];
+      filteredWallpapers = [];
+      return;
     }
     if (typeof WallpaperService !== "undefined" && WallpaperService.getWallpapersList) {
-      var wallpapers = WallpaperService.getWallpapersList(Screen.name)
-      wallpapersList = wallpapers
-      updateFilteredWallpapers()
+      var wallpapers = WallpaperService.getWallpapersList(Screen.name);
+      wallpapersList = wallpapers;
+      updateFilteredWallpapers();
       if (wallpapersList.length > 0 && selectedWallpaper === "") {
-        selectedWallpaper = wallpapersList[0]
+        selectedWallpaper = wallpapersList[0];
       }
     } else {
-      readDirectoryImages(selectedDirectory)
+      readDirectoryImages(selectedDirectory);
     }
   }
 
   function readDirectoryImages(directoryPath) {
-    directoryScanner.command = ["find", directoryPath, "-type", "f", "\\(-iname", "*.jpg", "-o", "-iname", "*.jpeg", "-o", "-iname", "*.png", "-o", "-iname", "*.bmp", "-o", "-iname", "*.webp", "-o", "-iname", "*.svg", "\\)"]
-    directoryScanner.running = true
-    return []
+    directoryScanner.command = ["find", directoryPath, "-type", "f", "\\(-iname", "*.jpg", "-o", "-iname", "*.jpeg", "-o", "-iname", "*.png", "-o", "-iname", "*.bmp", "-o", "-iname", "*.webp", "-o", "-iname", "*.svg", "\\)"];
+    directoryScanner.running = true;
+    return [];
   }
 
   onSelectedDirectoryChanged: {
     if (typeof Settings !== "undefined" && Settings.data && Settings.data.wallpaper) {
-      Settings.data.wallpaper.directory = selectedDirectory
+      Settings.data.wallpaper.directory = selectedDirectory;
     }
     if (typeof WallpaperService !== "undefined" && WallpaperService.refreshWallpapersList) {
-      WallpaperService.refreshWallpapersList()
+      WallpaperService.refreshWallpapersList();
     }
-    Qt.callLater(refreshWallpapers)
+    Qt.callLater(refreshWallpapers);
   }
 
   Connections {
@@ -466,7 +376,7 @@ ColumnLayout {
     enabled: typeof WallpaperService !== "undefined"
     function onWallpaperListChanged(screenName, count) {
       if (screenName === Screen.name) {
-        Qt.callLater(refreshWallpapers)
+        Qt.callLater(refreshWallpapers);
       }
     }
   }
@@ -481,14 +391,14 @@ ColumnLayout {
 
   Component.onCompleted: {
     if (typeof Settings !== "undefined" && Settings.data && Settings.data.wallpaper && Settings.data.wallpaper.directory) {
-      selectedDirectory = Settings.data.wallpaper.directory
+      selectedDirectory = Settings.data.wallpaper.directory;
     } else {
-      selectedDirectory = Quickshell.env("HOME") + "/Pictures/Wallpapers"
+      selectedDirectory = Quickshell.env("HOME") + "/Pictures/Wallpapers";
     }
     if (typeof WallpaperService !== "undefined" && WallpaperService.currentWallpaper) {
-      selectedWallpaper = WallpaperService.currentWallpaper
+      selectedWallpaper = WallpaperService.currentWallpaper;
     }
-    initialRefreshTimer.start()
+    initialRefreshTimer.start();
   }
 
   NFilePicker {
@@ -498,8 +408,8 @@ ColumnLayout {
     initialPath: selectedDirectory || Quickshell.env("HOME") + "/Pictures"
     onAccepted: paths => {
                   if (paths.length > 0) {
-                    selectedDirectory = paths[0]
-                    directoryChanged(paths[0])
+                    selectedDirectory = paths[0];
+                    directoryChanged(paths[0]);
                   }
                 }
   }
@@ -512,18 +422,18 @@ ColumnLayout {
     stderr: StdioCollector {}
     onExited: function (exitCode) {
       if (exitCode === 0) {
-        var lines = stdout.text.split('\n')
-        var images = []
+        var lines = stdout.text.split('\n');
+        var images = [];
         for (var i = 0; i < lines.length; i++) {
-          var line = lines[i].trim()
+          var line = lines[i].trim();
           if (line !== '') {
-            images.push(line)
+            images.push(line);
           }
         }
-        wallpapersList = images
-        updateFilteredWallpapers()
+        wallpapersList = images;
+        updateFilteredWallpapers();
         if (wallpapersList.length > 0 && selectedWallpaper === "") {
-          selectedWallpaper = wallpapersList[0]
+          selectedWallpaper = wallpapersList[0];
         }
       }
     }

@@ -2,84 +2,115 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
-import qs.Widgets.AudioSpectrum
 import qs.Commons
+import qs.Modules.Bar.Extras
 import qs.Services.Media
 import qs.Services.UI
 import qs.Widgets
+import qs.Widgets.AudioSpectrum
 
 Item {
   id: root
 
   property ShellScreen screen
-
-  // Widget properties passed from Bar.qml for per-instance settings
   property string widgetId: ""
   property string section: ""
   property int sectionWidgetIndex: -1
   property int sectionWidgetsCount: 0
   property real scaling: 1.0
 
+  // Settings
   property var widgetMetadata: BarWidgetRegistry.widgetMetadata[widgetId]
   property var widgetSettings: {
     if (section && sectionWidgetIndex >= 0) {
-      var widgets = Settings.data.bar.widgets[section]
+      var widgets = Settings.data.bar.widgets[section];
       if (widgets && sectionWidgetIndex < widgets.length) {
-        return widgets[sectionWidgetIndex]
+        return widgets[sectionWidgetIndex];
       }
     }
-    return {}
+    return {};
   }
 
-  readonly property bool isVerticalBar: (Settings.data.bar.position === "left" || Settings.data.bar.position === "right")
+  // Bar orientation
+  readonly property bool isVertical: Settings.data.bar.position === "left" || Settings.data.bar.position === "right"
 
-  readonly property string hideMode: (widgetSettings.hideMode !== undefined) ? widgetSettings.hideMode : "hidden" // "visible", "hidden", "transparent", "idle"
-  // Backward compatibility: honor legacy hideWhenIdle setting if present
+  // Widget settings
+  readonly property string hideMode: (widgetSettings.hideMode !== undefined) ? widgetSettings.hideMode : "hidden"
   readonly property bool hideWhenIdle: (widgetSettings.hideWhenIdle !== undefined) ? widgetSettings.hideWhenIdle : (widgetMetadata.hideWhenIdle !== undefined ? widgetMetadata.hideWhenIdle : false)
   readonly property bool showAlbumArt: (widgetSettings.showAlbumArt !== undefined) ? widgetSettings.showAlbumArt : widgetMetadata.showAlbumArt
+  readonly property bool showArtistFirst: (widgetSettings.showArtistFirst !== undefined) ? widgetSettings.showArtistFirst : widgetMetadata.showArtistFirst
   readonly property bool showVisualizer: (widgetSettings.showVisualizer !== undefined) ? widgetSettings.showVisualizer : widgetMetadata.showVisualizer
   readonly property string visualizerType: (widgetSettings.visualizerType !== undefined && widgetSettings.visualizerType !== "") ? widgetSettings.visualizerType : widgetMetadata.visualizerType
   readonly property string scrollingMode: (widgetSettings.scrollingMode !== undefined) ? widgetSettings.scrollingMode : widgetMetadata.scrollingMode
-
-  // Maximum widget width with user settings support
-  readonly property real maxWidth: (widgetSettings.maxWidth !== undefined) ? widgetSettings.maxWidth : Math.max(widgetMetadata.maxWidth, screen ? screen.width * 0.06 : 0)
+  readonly property bool showProgressRing: (widgetSettings.showProgressRing !== undefined) ? widgetSettings.showProgressRing : widgetMetadata.showProgressRing
   readonly property bool useFixedWidth: (widgetSettings.useFixedWidth !== undefined) ? widgetSettings.useFixedWidth : widgetMetadata.useFixedWidth
+  readonly property real maxWidth: (widgetSettings.maxWidth !== undefined) ? widgetSettings.maxWidth : Math.max(widgetMetadata.maxWidth, screen ? screen.width * 0.06 : 0)
 
-  readonly property bool hasActivePlayer: MediaService.currentPlayer !== null
-  readonly property string placeholderText: I18n.tr("bar.widget-settings.media-mini.no-active-player")
+  // Dimensions
+  readonly property int iconSize: Math.round(18 * scaling)
+  readonly property int artSize: Math.round(21 * scaling)
+  readonly property int verticalSize: Math.round((Style.baseWidgetSize - 5) * scaling)
 
-  readonly property string tooltipText: {
-    var title = getTitle()
-    var controls = ""
-    if (MediaService.canGoNext) {
-      controls += "Right click for next.\n"
-    }
-    if (MediaService.canGoPrevious) {
-      controls += "Middle click for previous."
-    }
-    if (controls !== "") {
-      return title + "\n\n" + controls
-    }
-    return title
+  // State
+  readonly property bool hasPlayer: MediaService.currentPlayer !== null
+  readonly property bool shouldHideIdle: (hideMode === "idle" || hideWhenIdle) && !MediaService.isPlaying
+  readonly property bool shouldHideEmpty: !hasPlayer && hideMode === "hidden"
+  readonly property bool isHidden: shouldHideIdle || shouldHideEmpty
+
+  // Title
+  readonly property string title: {
+    if (!hasPlayer)
+      return I18n.tr("bar.widget-settings.media-mini.no-active-player");
+    var artist = MediaService.trackArtist;
+    var track = MediaService.trackTitle;
+    return showArtistFirst ? (artist ? `${artist} - ${track}` : track) : (artist ? `${track} - ${artist}` : track);
   }
 
-  // Hide conditions
-  readonly property bool shouldHideIdle: ((hideMode === "idle") || hideWhenIdle) && !MediaService.isPlaying
-  readonly property bool isEmptyForHideMode: (!hasActivePlayer) && (hideMode === "hidden" || hideMode === "transparent")
+  readonly property string tooltipText: {
+    var text = title;
+    var controls = [];
+    if (MediaService.canGoNext)
+      controls.push("Right click for next.");
+    if (MediaService.canGoPrevious)
+      controls.push("Middle click for previous.");
+    return controls.length ? `${text}\n\n${controls.join("\n")}` : text;
+  }
 
-  implicitHeight: visible ? (isVerticalBar ? ((shouldHideIdle || isEmptyForHideMode) ? 0 : calculatedVerticalDimension()) : Style.capsuleHeight) : 0
-  implicitWidth: visible ? (isVerticalBar ? ((shouldHideIdle || isEmptyForHideMode) ? 0 : calculatedVerticalDimension()) : ((shouldHideIdle || isEmptyForHideMode) ? 0 : dynamicWidth)) : 0
+  // Layout
+  implicitWidth: visible ? (isVertical ? (isHidden ? 0 : verticalSize) : (isHidden ? 0 : contentWidth)) : 0
+  implicitHeight: visible ? (isVertical ? (isHidden ? 0 : verticalSize) : Style.capsuleHeight) : 0
+  visible: !shouldHideIdle && (hideMode !== "hidden" || opacity > 0)
+  opacity: isHidden ? 0.0 : ((hideMode === "transparent" && !hasPlayer) ? 0.0 : 1.0)
 
-  // "visible": Always Visible, "hidden": Hide When Empty, "transparent": Transparent When Empty, "idle": Hide When Idle (not playing)
-  visible: shouldHideIdle ? false : (hideMode !== "hidden" || opacity > 0)
-  opacity: shouldHideIdle ? 0.0 : (((hideMode !== "hidden" || hasActivePlayer) && (hideMode !== "transparent" || hasActivePlayer)) ? 1.0 : 0.0)
+  readonly property real contentWidth: {
+    if (useFixedWidth)
+      return maxWidth;
+
+    // Calculate icon/art width
+    var iconWidth = 0;
+    if (!hasPlayer || (!showAlbumArt && !showProgressRing)) {
+      iconWidth = iconSize;
+    } else if (showAlbumArt || showProgressRing) {
+      iconWidth = artSize;
+    }
+
+    // Add spacing and text width
+    var textWidth = 0;
+    if (titleMetrics.contentWidth > 0) {
+      textWidth = Style.marginS * scaling + titleMetrics.contentWidth + Style.marginXXS * 2;
+    }
+
+    var margins = isVertical ? 0 : (Style.marginS * scaling * 2);
+    var total = iconWidth + textWidth + margins;
+    return hasPlayer ? Math.min(total, maxWidth) : total;
+  }
+
   Behavior on opacity {
     NumberAnimation {
       duration: Style.animationNormal
       easing.type: Easing.InOutCubic
     }
   }
-
   Behavior on implicitWidth {
     NumberAnimation {
       duration: Style.animationNormal
@@ -93,89 +124,83 @@ Item {
     }
   }
 
-  function getTitle() {
-    return MediaService.trackTitle + (MediaService.trackArtist !== "" ? ` - ${MediaService.trackArtist}` : "")
-  }
-
-  function calculatedVerticalDimension() {
-    return Math.round((Style.baseWidgetSize - 5) * scaling)
-  }
-
-  function calculateContentWidth() {
-    // Calculate the actual content width based on visible elements
-    var contentWidth = 0
-    var margins = Style.marginS * scaling * 2 // Left and right margins
-
-    // Icon or album art width
-    if (!hasActivePlayer || !showAlbumArt) {
-      // Icon width
-      contentWidth += Math.round(18 * scaling)
-    } else if (showAlbumArt && hasActivePlayer) {
-      // Album art width
-      contentWidth += 21 * scaling
-    }
-
-    // Spacing between icon/art and text; only if there is text
-    if (fullTitleMetrics.contentWidth > 0) {
-      contentWidth += Style.marginS * scaling
-
-      // Text width (use the measured width)
-      contentWidth += fullTitleMetrics.contentWidth
-
-      // Additional small margin for text
-      contentWidth += Style.marginXXS * 2
-    }
-
-    // Add container margins
-    contentWidth += margins
-
-    return Math.ceil(contentWidth)
-  }
-
-  // Dynamic width: adapt to content but respect maximum width setting
-  readonly property real dynamicWidth: {
-    // If using fixed width mode, always use maxWidth
-    if (useFixedWidth) {
-      return maxWidth
-    }
-    // Otherwise, adapt to content
-    if (!hasActivePlayer) {
-      // Keep compact when no active player
-      return calculateContentWidth()
-    }
-    // Use content width but don't exceed user-set maximum width
-    return Math.min(calculateContentWidth(), maxWidth)
-  }
-
-  //  A hidden text element to safely measure the full title width
+  // Hidden text for measurements
   NText {
-    id: fullTitleMetrics
+    id: titleMetrics
     visible: false
-    text: titleText.text
-    font: titleText.font
+    text: title
     applyUiScale: false
     pointSize: Style.fontSizeS * scaling
+    font.weight: Style.fontWeightMedium
   }
 
+  // Context menu
+  NPopupContextMenu {
+    id: contextMenu
+    model: {
+      var items = [];
+      if (hasPlayer && MediaService.canPlay) {
+        items.push({
+                     "label": MediaService.isPlaying ? I18n.tr("context-menu.pause") : I18n.tr("context-menu.play"),
+                     "action": "play-pause",
+                     "icon": MediaService.isPlaying ? "media-pause" : "media-play"
+                   });
+      }
+      if (hasPlayer && MediaService.canGoPrevious) {
+        items.push({
+                     "label": I18n.tr("context-menu.previous"),
+                     "action": "previous",
+                     "icon": "media-prev"
+                   });
+      }
+      if (hasPlayer && MediaService.canGoNext) {
+        items.push({
+                     "label": I18n.tr("context-menu.next"),
+                     "action": "next",
+                     "icon": "media-next"
+                   });
+      }
+      items.push({
+                   "label": I18n.tr("context-menu.widget-settings"),
+                   "action": "widget-settings",
+                   "icon": "settings"
+                 });
+      return items;
+    }
+
+    onTriggered: action => {
+                   var popupWindow = PanelService.getPopupMenuWindow(screen);
+                   if (popupWindow)
+                   popupWindow.close();
+
+                   if (action === "play-pause")
+                   MediaService.playPause();
+                   else if (action === "previous")
+                   MediaService.previous();
+                   else if (action === "next")
+                   MediaService.next();
+                   else if (action === "widget-settings") {
+                     BarService.openWidgetSettings(screen, section, sectionWidgetIndex, widgetId, widgetSettings);
+                   }
+                 }
+  }
+
+  // Main container
   Rectangle {
-    id: mediaMini
-    visible: root.visible
+    id: container
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
-    width: isVerticalBar ? ((shouldHideIdle || isEmptyForHideMode) ? 0 : calculatedVerticalDimension()) : ((shouldHideIdle || isEmptyForHideMode) ? 0 : dynamicWidth)
-    height: isVerticalBar ? ((shouldHideIdle || isEmptyForHideMode) ? 0 : calculatedVerticalDimension()) : Style.capsuleHeight
-    radius: isVerticalBar ? width / 2 : Style.radiusM
-    color: Settings.data.bar.showCapsule ? Color.mSurfaceVariant : Color.transparent
+    width: isVertical ? (isHidden ? 0 : verticalSize) : (isHidden ? 0 : contentWidth)
+    height: isVertical ? (isHidden ? 0 : verticalSize) : Style.capsuleHeight
+    radius: Style.radiusM
+    color: Style.capsuleColor
 
-    // Smooth width transition
     Behavior on width {
       NumberAnimation {
         duration: Style.animationNormal
         easing.type: Easing.InOutCubic
       }
     }
-
-    // Smooth height transition for vertical bar
     Behavior on height {
       NumberAnimation {
         duration: Style.animationNormal
@@ -184,307 +209,366 @@ Item {
     }
 
     Item {
-      id: mainContainer
       anchors.fill: parent
-      anchors.leftMargin: isVerticalBar ? 0 : Style.marginS * scaling
-      anchors.rightMargin: isVerticalBar ? 0 : Style.marginS * scaling
+      anchors.leftMargin: isVertical ? 0 : Style.marginS * scaling
+      anchors.rightMargin: isVertical ? 0 : Style.marginS * scaling
       clip: true
 
+      // Visualizer
       Loader {
         anchors.verticalCenter: parent.verticalCenter
         anchors.horizontalCenter: parent.horizontalCenter
-        active: showVisualizer && visualizerType == "linear"
+        width: parent.width
+        height: parent.height
+        active: showVisualizer
         z: 0
-
-        sourceComponent: NLinearSpectrum {
-          width: mainContainer.width - Style.marginS
-          height: 20
-          values: CavaService.values
-          fillColor: Color.mPrimary
-          opacity: 0.4
+        sourceComponent: {
+          if (!showVisualizer)
+            return null;
+          if (visualizerType === "linear")
+            return linearSpectrum;
+          if (visualizerType === "mirrored")
+            return mirroredSpectrum;
+          if (visualizerType === "wave")
+            return waveSpectrum;
+          return null;
         }
       }
 
-      Loader {
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.horizontalCenter: parent.horizontalCenter
-        active: showVisualizer && visualizerType == "mirrored"
-        z: 0
-
-        sourceComponent: NMirroredSpectrum {
-          width: mainContainer.width - Style.marginS
-          height: mainContainer.height - Style.marginS
-          values: CavaService.values
-          fillColor: Color.mPrimary
-          opacity: 0.4
-        }
-      }
-
-      Loader {
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.horizontalCenter: parent.horizontalCenter
-        active: showVisualizer && visualizerType == "wave"
-        z: 0
-
-        sourceComponent: NWaveSpectrum {
-          width: mainContainer.width - Style.marginS
-          height: mainContainer.height - Style.marginS
-          values: CavaService.values
-          fillColor: Color.mPrimary
-          opacity: 0.4
-        }
-      }
-
-      // Horizontal layout for top/bottom bars
+      // Horizontal layout
       RowLayout {
-        id: rowLayout
-
+        anchors.fill: parent
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.marginS * scaling
-        visible: !isVerticalBar
-        z: 1 // Above the visualizer
+        visible: !isVertical
+        z: 1
 
+        // Icon (when no player or features disabled)
         NIcon {
-          id: windowIcon
-          icon: hasActivePlayer ? (MediaService.isPlaying ? "media-pause" : "media-play") : "disc"
-          color: hasActivePlayer ? Color.mOnSurface : Color.mOnSurfaceVariant
+          visible: !hasPlayer || (!showAlbumArt && !showProgressRing)
+          icon: hasPlayer ? (MediaService.isPlaying ? "media-pause" : "media-play") : "disc"
+          color: hasPlayer ? Color.mOnSurface : Color.mOnSurfaceVariant
           pointSize: Style.fontSizeL * scaling
-          verticalAlignment: Text.AlignVCenter
+          Layout.preferredWidth: iconSize
+          Layout.preferredHeight: iconSize
           Layout.alignment: Qt.AlignVCenter
-          visible: !hasActivePlayer || (!showAlbumArt && !trackArt.visible)
         }
 
-        ColumnLayout {
+        // Album art / Progress ring
+        Item {
+          visible: hasPlayer && (showAlbumArt || showProgressRing)
+          Layout.preferredWidth: visible ? artSize : 0
+          Layout.preferredHeight: visible ? artSize : 0
           Layout.alignment: Qt.AlignVCenter
-          visible: showAlbumArt && hasActivePlayer
-          spacing: 0
+
+          ProgressRing {
+            id: progressRing
+            anchors.fill: parent
+            visible: showProgressRing
+            progress: MediaService.trackLength > 0 ? MediaService.currentPosition / MediaService.trackLength : 0
+            lineWidth: 2 * scaling
+          }
 
           Item {
-            Layout.preferredWidth: Math.round(21 * scaling)
-            Layout.preferredHeight: Math.round(21 * scaling)
+            anchors.fill: parent
+            anchors.margins: showProgressRing ? (3 * scaling) : 0.5
 
-            NImageCircled {
-              id: trackArt
+            NImageRounded {
+              visible: showAlbumArt && hasPlayer
               anchors.fill: parent
+              anchors.margins: showProgressRing ? 0 : -1 * scaling
+              radius: width / 2
               imagePath: MediaService.trackArtUrl
               fallbackIcon: MediaService.isPlaying ? "media-pause" : "media-play"
-              fallbackIconSize: 10
+              fallbackIconSize: showProgressRing ? 10 : 12
               borderWidth: 0
-              border.color: Color.transparent
+            }
+
+            NIcon {
+              visible: !showAlbumArt && showProgressRing && hasPlayer
+              anchors.centerIn: parent
+              icon: MediaService.isPlaying ? "media-pause" : "media-play"
+              color: Color.mOnSurface
+              pointSize: 8 * scaling
             }
           }
         }
 
+        // Scrolling title
         Item {
           id: titleContainer
-          Layout.preferredWidth: {
-            // Calculate available width based on other elements in the row
-            var iconWidth = (windowIcon.visible ? (18 * scaling + Style.marginS * scaling) : 0)
-            var albumArtWidth = (hasActivePlayer && showAlbumArt ? (21 * scaling + Style.marginS * scaling) : 0)
-            var totalMargins = Style.marginXXS * 2
-            var availableWidth = mainContainer.width - iconWidth - albumArtWidth - totalMargins
-            return Math.max(20, availableWidth)
-          }
-          Layout.maximumWidth: Layout.preferredWidth
+          Layout.fillWidth: true
           Layout.alignment: Qt.AlignVCenter
-          Layout.preferredHeight: titleText.height
+          Layout.preferredHeight: titleMetrics.height
 
-          clip: true
-
-          property bool isScrolling: false
-          property bool isResetting: false
-          property real textWidth: fullTitleMetrics.contentWidth
-          property real containerWidth: 0
-          property bool needsScrolling: textWidth > containerWidth
-
-          // Timer for "always" mode with delay
-          Timer {
-            id: scrollStartTimer
-            interval: 1000
-            repeat: false
-            onTriggered: {
-              if (scrollingMode === "always" && titleContainer.needsScrolling) {
-                titleContainer.isScrolling = true
-                titleContainer.isResetting = false
-              }
-            }
-          }
-
-          // Update scrolling state based on mode
-          property var updateScrollingState: function () {
-            if (scrollingMode === "never") {
-              isScrolling = false
-              isResetting = false
-            } else if (scrollingMode === "always") {
-              if (needsScrolling) {
-                if (mouseArea.containsMouse) {
-                  isScrolling = false
-                  isResetting = true
-                } else {
-                  scrollStartTimer.restart()
-                }
-              } else {
-                scrollStartTimer.stop()
-                isScrolling = false
-                isResetting = false
-              }
-            } else if (scrollingMode === "hover") {
-              if (mouseArea.containsMouse && needsScrolling) {
-                isScrolling = true
-                isResetting = false
-              } else {
-                isScrolling = false
-                if (needsScrolling) {
-                  isResetting = true
-                }
-              }
-            }
-          }
-
-          onWidthChanged: {
-            containerWidth = width
-            updateScrollingState()
-          }
-
-          Component.onCompleted: {
-            containerWidth = width
-            updateScrollingState()
-          }
-
-          Connections {
-            target: mouseArea
-            function onContainsMouseChanged() {
-              titleContainer.updateScrollingState()
-            }
-          }
-
-          // Scrolling content
-          Item {
-            id: scrollContainer
-            height: parent.height
-            width: parent.width
-
-            property real scrollX: 0
-            x: scrollX
-
-            RowLayout {
-              spacing: 50 // Gap between text copies
-
-              NText {
-                id: titleText
-                text: hasActivePlayer ? getTitle() : placeholderText
-                pointSize: Style.fontSizeS * scaling
-                applyUiScale: false
-                font.weight: Style.fontWeightMedium
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: hasActivePlayer ? Text.AlignLeft : Text.AlignHCenter
-                color: hasActivePlayer ? Color.mOnSurface : Color.mOnSurfaceVariant
-                onTextChanged: {
-                  titleContainer.isScrolling = false
-                  titleContainer.isResetting = false
-                  scrollContainer.scrollX = 0
-                  if (titleContainer.needsScrolling) {
-                    scrollStartTimer.restart()
-                  }
-                }
-              }
-
-              NText {
-                text: hasActivePlayer ? getTitle() : placeholderText
-                font: titleText.font
-                applyUiScale: false
-                pointSize: Style.fontSizeS * scaling
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: hasActivePlayer ? Text.AlignLeft : Text.AlignHCenter
-                color: hasActivePlayer ? Color.mOnSurface : Color.mOnSurfaceVariant
-                visible: hasActivePlayer && titleContainer.needsScrolling && titleContainer.isScrolling
-              }
-            }
-
-            // Reset animation
-            NumberAnimation on scrollX {
-              running: titleContainer.isResetting
-              to: 0
-              duration: 300
-              easing.type: Easing.OutQuad
-              onFinished: {
-                titleContainer.isResetting = false
-              }
-            }
-
-            // Seamless infinite scroll
-            NumberAnimation on scrollX {
-              id: infiniteScroll
-              running: titleContainer.isScrolling && !titleContainer.isResetting
-              from: 0
-              to: -(titleContainer.textWidth + 50) // Scroll one complete text width + gap
-              duration: Math.max(4000, getTitle().length * 120)
-              loops: Animation.Infinite
-              easing.type: Easing.Linear
-            }
-          }
-        }
-      }
-
-      // Vertical layout for left/right bars - icon only
-      Item {
-        id: verticalLayout
-        anchors.centerIn: parent
-        width: parent.width - Style.marginM * 2
-        height: parent.height - Style.marginM * 2
-        visible: isVerticalBar
-        z: 1 // Above the visualizer
-
-        // Media icon
-        Item {
-          width: Style.baseWidgetSize * 0.5
-          height: width
-          anchors.centerIn: parent
-
-          NIcon {
-            id: mediaIconVertical
+          ScrollingText {
             anchors.fill: parent
-            icon: hasActivePlayer ? (MediaService.isPlaying ? "media-pause" : "media-play") : "disc"
-            color: hasActivePlayer ? Color.mOnSurface : Color.mOnSurfaceVariant
-            pointSize: Style.fontSizeL * scaling
-            verticalAlignment: Text.AlignVCenter
-            horizontalAlignment: Text.AlignHCenter
+            text: title
+            textColor: hasPlayer ? Color.mOnSurface : Color.mOnSurfaceVariant
+            fontSize: Style.fontSizeS * scaling
+            scrollMode: scrollingMode
+            needsScroll: titleMetrics.contentWidth > parent.width
           }
         }
       }
 
-      // Mouse area for hover detection
+      // Vertical layout
+      Item {
+        visible: isVertical
+        anchors.centerIn: parent
+        width: showProgressRing ? (Style.baseWidgetSize * 0.5 * scaling) : (verticalSize - 4 * scaling)
+        height: width
+        z: 1
+
+        ProgressRing {
+          anchors.fill: parent
+          anchors.margins: -4
+          visible: showProgressRing
+          progress: MediaService.trackLength > 0 ? MediaService.currentPosition / MediaService.trackLength : 0
+          lineWidth: 2.5 * scaling
+        }
+
+        NImageRounded {
+          visible: showAlbumArt && hasPlayer
+          anchors.fill: parent
+          radius: width / 2
+          imagePath: MediaService.trackArtUrl
+          fallbackIcon: MediaService.isPlaying ? "media-pause" : "media-play"
+          fallbackIconSize: 12
+          borderWidth: 0
+        }
+
+        NIcon {
+          visible: !showAlbumArt || !hasPlayer
+          anchors.centerIn: parent
+          width: parent.width
+          height: parent.height
+          icon: hasPlayer ? (MediaService.isPlaying ? "media-pause" : "media-play") : "disc"
+          color: hasPlayer ? Color.mOnSurface : Color.mOnSurfaceVariant
+          pointSize: Style.fontSizeM * scaling
+        }
+      }
+
+      // Mouse interaction
       MouseArea {
-        id: mouseArea
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: hasActivePlayer ? Qt.PointingHandCursor : Qt.ArrowCursor
+        cursorShape: hasPlayer ? Qt.PointingHandCursor : Qt.ArrowCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onClicked: mouse => {
-                     if (!hasActivePlayer || !MediaService.currentPlayer || !MediaService.canPlay) {
-                       return
-                     }
 
-                     if (mouse.button === Qt.LeftButton) {
-                       MediaService.playPause()
-                     } else if (mouse.button == Qt.RightButton) {
-                       MediaService.next()
-                       TooltipService.hide()
-                     } else if (mouse.button == Qt.MiddleButton) {
-                       MediaService.previous()
-                       TooltipService.hide()
+        onClicked: mouse => {
+                     if (mouse.button === Qt.LeftButton && hasPlayer && MediaService.canPlay) {
+                       MediaService.playPause();
+                     } else if (mouse.button === Qt.RightButton) {
+                       TooltipService.hide();
+                       var popupWindow = PanelService.getPopupMenuWindow(screen);
+                       if (popupWindow) {
+                         popupWindow.showContextMenu(contextMenu);
+                         const pos = BarService.getContextMenuPosition(container, contextMenu.implicitWidth, contextMenu.implicitHeight);
+                         contextMenu.openAtItem(container, pos.x, pos.y);
+                       }
+                     } else if (mouse.button === Qt.MiddleButton && hasPlayer && MediaService.canGoPrevious) {
+                       MediaService.previous();
+                       TooltipService.hide();
                      }
                    }
 
         onEntered: {
-          var textToShow = hasActivePlayer ? tooltipText : placeholderText
-          if ((textToShow !== "") && isVerticalBar || (scrollingMode === "never")) {
-            TooltipService.show(Screen, root, textToShow, BarService.getTooltipDirection())
+          if (isVertical || scrollingMode === "never") {
+            TooltipService.show(root, title, BarService.getTooltipDirection());
           }
         }
-        onExited: {
-          TooltipService.hide()
+        onExited: TooltipService.hide()
+      }
+    }
+  }
+
+  // Components
+  Component {
+    id: linearSpectrum
+    NLinearSpectrum {
+      width: parent.width - Style.marginS
+      height: 20
+      values: CavaService.values
+      fillColor: Color.mPrimary
+      opacity: 0.4
+      barPosition: Settings.data.bar.position
+    }
+  }
+
+  Component {
+    id: mirroredSpectrum
+    NMirroredSpectrum {
+      width: parent.width - Style.marginS
+      height: parent.height - Style.marginS
+      values: CavaService.values
+      fillColor: Color.mPrimary
+      opacity: 0.4
+    }
+  }
+
+  Component {
+    id: waveSpectrum
+    NWaveSpectrum {
+      width: parent.width - Style.marginS
+      height: parent.height - Style.marginS
+      values: CavaService.values
+      fillColor: Color.mPrimary
+      opacity: 0.4
+    }
+  }
+
+  // Progress Ring Component
+  component ProgressRing: Canvas {
+    property real progress: 0
+    property real lineWidth: 2.5
+
+    onProgressChanged: requestPaint()
+    Component.onCompleted: requestPaint()
+
+    Connections {
+      target: Color
+      function onMPrimaryChanged() {
+        requestPaint();
+      }
+    }
+
+    onPaint: {
+      if (width <= 0 || height <= 0)
+        return;
+
+      var ctx = getContext("2d");
+      var centerX = width / 2;
+      var centerY = height / 2;
+      var radius = Math.min(width, height) / 2 - lineWidth;
+
+      ctx.reset();
+
+      // Background
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = Qt.alpha(Color.mOnSurface, 0.4);
+      ctx.stroke();
+
+      // Progress
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, -Math.PI / 2, -Math.PI / 2 + progress * 2 * Math.PI);
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = Color.mPrimary;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+  }
+
+  // Scrolling Text Component
+  component ScrollingText: Item {
+    id: scrollText
+    property string text
+    property color textColor
+    property real fontSize
+    property string scrollMode
+    property bool needsScroll
+
+    clip: true
+    implicitHeight: titleText.height
+
+    property bool isScrolling: false
+    property bool isResetting: false
+
+    Timer {
+      id: scrollTimer
+      interval: 1000
+      onTriggered: {
+        if (scrollMode === "always" && needsScroll) {
+          scrollText.isScrolling = true;
+          scrollText.isResetting = false;
         }
+      }
+    }
+
+    MouseArea {
+      id: hoverArea
+      anchors.fill: parent
+      hoverEnabled: true
+    }
+
+    function updateState() {
+      if (scrollMode === "never") {
+        isScrolling = false;
+        isResetting = false;
+      } else if (scrollMode === "always") {
+        if (needsScroll) {
+          if (hoverArea.containsMouse) {
+            isScrolling = false;
+            isResetting = true;
+          } else {
+            scrollTimer.restart();
+          }
+        }
+      } else if (scrollMode === "hover") {
+        isScrolling = hoverArea.containsMouse && needsScroll;
+        isResetting = !hoverArea.containsMouse && needsScroll;
+      }
+    }
+
+    onWidthChanged: updateState()
+    Component.onCompleted: updateState()
+    Connections {
+      target: hoverArea
+      function onContainsMouseChanged() {
+        scrollText.updateState();
+      }
+    }
+
+    Item {
+      id: scrollContainer
+      height: parent.height
+      property real scrollX: 0
+      x: scrollX
+
+      RowLayout {
+        spacing: 50
+        NText {
+          id: titleText
+          text: scrollText.text
+          color: textColor
+          pointSize: fontSize
+          applyUiScale: false
+          font.weight: Style.fontWeightMedium
+          onTextChanged: {
+            scrollText.isScrolling = false;
+            scrollText.isResetting = false;
+            scrollContainer.scrollX = 0;
+            if (scrollText.needsScroll)
+              scrollTimer.restart();
+          }
+        }
+        NText {
+          text: scrollText.text
+          color: textColor
+          pointSize: fontSize
+          applyUiScale: false
+          font.weight: Style.fontWeightMedium
+          visible: scrollText.needsScroll && scrollText.isScrolling
+        }
+      }
+
+      NumberAnimation on scrollX {
+        running: scrollText.isResetting
+        to: 0
+        duration: 300
+        easing.type: Easing.OutQuad
+        onFinished: scrollText.isResetting = false
+      }
+
+      NumberAnimation on scrollX {
+        running: scrollText.isScrolling && !scrollText.isResetting
+        from: 0
+        to: -(titleMetrics.contentWidth + 50)
+        duration: Math.max(4000, scrollText.text.length * 120)
+        loops: Animation.Infinite
+        easing.type: Easing.Linear
       }
     }
   }

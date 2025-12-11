@@ -2,9 +2,9 @@ import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Widgets
-import Quickshell.Wayland
 import Quickshell.Services.Notifications
+import Quickshell.Wayland
+import Quickshell.Widgets
 import qs.Commons
 import qs.Services.System
 import qs.Widgets
@@ -21,7 +21,7 @@ Variants {
 
     property ListModel notificationModel: NotificationService.activeList
 
-    // Loader is active when there are notifications
+    // Always create window (but with 0x0 dimensions when no notifications)
     active: notificationModel.count > 0 || delayTimer.running
 
     // Keep loader active briefly after last notification to allow animations to complete
@@ -35,7 +35,7 @@ Variants {
       target: notificationModel
       function onCountChanged() {
         if (notificationModel.count === 0 && root.active) {
-          delayTimer.restart()
+          delayTimer.restart();
         }
       }
     }
@@ -66,30 +66,30 @@ Variants {
       // Calculate bar offsets for each edge separately
       readonly property int barOffsetTop: {
         if (barPos !== "top")
-          return 0
-        const floatMarginV = isFloating ? Settings.data.bar.marginVertical * Style.marginXL : 0
-        return Style.barHeight + floatMarginV
+          return 0;
+        const floatMarginV = isFloating ? Math.ceil(Settings.data.bar.marginVertical * Style.marginXL) : 0;
+        return Style.barHeight + floatMarginV;
       }
 
       readonly property int barOffsetBottom: {
         if (barPos !== "bottom")
-          return 0
-        const floatMarginV = isFloating ? Settings.data.bar.marginVertical * Style.marginXL : 0
-        return Style.barHeight + floatMarginV
+          return 0;
+        const floatMarginV = isFloating ? Math.ceil(Settings.data.bar.marginVertical * Style.marginXL) : 0;
+        return Style.barHeight + floatMarginV;
       }
 
       readonly property int barOffsetLeft: {
         if (barPos !== "left")
-          return 0
-        const floatMarginH = isFloating ? Settings.data.bar.marginHorizontal * Style.marginXL : 0
-        return floatMarginH
+          return 0;
+        const floatMarginH = isFloating ? Math.ceil(Settings.data.bar.marginHorizontal * Style.marginXL) : 0;
+        return Style.barHeight + floatMarginH;
       }
 
       readonly property int barOffsetRight: {
         if (barPos !== "right")
-          return 0
-        const floatMarginH = isFloating ? Settings.data.bar.marginHorizontal * Style.marginXL : 0
-        return floatMarginH
+          return 0;
+        const floatMarginH = isFloating ? Math.ceil(Settings.data.bar.marginHorizontal * Style.marginXL) : 0;
+        return Style.barHeight + floatMarginH;
       }
 
       // Anchoring
@@ -111,31 +111,31 @@ Variants {
 
       Component.onCompleted: {
         animateConnection = function (notificationId) {
-          var delegate = null
+          var delegate = null;
           if (notificationRepeater) {
             for (var i = 0; i < notificationRepeater.count; i++) {
-              var item = notificationRepeater.itemAt(i)
+              var item = notificationRepeater.itemAt(i);
               if (item?.notificationId === notificationId) {
-                delegate = item
-                break
+                delegate = item;
+                break;
               }
             }
           }
 
           if (delegate?.animateOut) {
-            delegate.animateOut()
+            delegate.animateOut();
           } else {
-            NotificationService.dismissActiveNotification(notificationId)
+            NotificationService.dismissActiveNotification(notificationId);
           }
-        }
+        };
 
-        NotificationService.animateAndRemove.connect(animateConnection)
+        NotificationService.animateAndRemove.connect(animateConnection);
       }
 
       Component.onDestruction: {
         if (animateConnection) {
-          NotificationService.animateAndRemove.disconnect(animateConnection)
-          animateConnection = null
+          NotificationService.animateAndRemove.disconnect(animateConnection);
+          animateConnection = null;
         }
       }
 
@@ -223,8 +223,8 @@ Variants {
                   width: parent.availableWidth * model.progress
 
                   color: {
-                    var baseColor = model.urgency === 2 ? Color.mError : model.urgency === 0 ? Color.mOnSurface : Color.mPrimary
-                    return Qt.alpha(baseColor, Settings.data.notifications.backgroundOpacity || 1.0)
+                    var baseColor = model.urgency === 2 ? Color.mError : model.urgency === 0 ? Color.mOnSurface : Color.mPrimary;
+                    return Qt.alpha(baseColor, Settings.data.notifications.backgroundOpacity || 1.0);
                   }
 
                   antialiasing: true
@@ -248,19 +248,26 @@ Variants {
               }
             }
 
-            NDropShadows {
+            NDropShadow {
               anchors.fill: cardBackground
               source: cardBackground
               autoPaddingEnabled: true
+
+              // Override with hard shadow settings
+              shadowBlur: 0.0  // Sharp shadow
+              shadowOpacity: 0.85
+              shadowColor: Color.mSecondary
+              shadowHorizontalOffset: 3
+              shadowVerticalOffset: 3
             }
 
             // Hover handling
             onHoverCountChanged: {
               if (hoverCount > 0) {
-                resumeTimer.stop()
-                NotificationService.pauseTimeout(notificationId)
+                resumeTimer.stop();
+                NotificationService.pauseTimeout(notificationId);
               } else {
-                resumeTimer.start()
+                resumeTimer.start();
               }
             }
 
@@ -270,7 +277,7 @@ Variants {
               repeat: false
               onTriggered: {
                 if (hoverCount === 0) {
-                  NotificationService.resumeTimeout(notificationId)
+                  NotificationService.resumeTimeout(notificationId);
                 }
               }
             }
@@ -284,30 +291,30 @@ Variants {
               onExited: parent.hoverCount--
               onClicked: {
                 if (mouse.button === Qt.RightButton) {
-                  animateOut()
+                  animateOut();
                 }
               }
             }
 
             // Animation setup
             function triggerEntryAnimation() {
-              animInDelayTimer.stop()
-              removalTimer.stop()
-              resumeTimer.stop()
-              isRemoving = false
-              hoverCount = 0
+              animInDelayTimer.stop();
+              removalTimer.stop();
+              resumeTimer.stop();
+              isRemoving = false;
+              hoverCount = 0;
               if (Settings.data.general.animationDisabled) {
-                slideOffset = 0
-                scaleValue = 1.0
-                opacityValue = 1.0
-                return
+                slideOffset = 0;
+                scaleValue = 1.0;
+                opacityValue = 1.0;
+                return;
               }
 
-              slideOffset = slideInOffset
-              scaleValue = 0.8
-              opacityValue = 0.0
-              animInDelayTimer.interval = animationDelay
-              animInDelayTimer.start()
+              slideOffset = slideInOffset;
+              scaleValue = 0.8;
+              opacityValue = 0.0;
+              animInDelayTimer.interval = animationDelay;
+              animInDelayTimer.start();
             }
 
             Component.onCompleted: triggerEntryAnimation()
@@ -320,23 +327,23 @@ Variants {
               repeat: false
               onTriggered: {
                 if (card.isRemoving)
-                  return
-                slideOffset = 0
-                scaleValue = 1.0
-                opacityValue = 1.0
+                  return;
+                slideOffset = 0;
+                scaleValue = 1.0;
+                opacityValue = 1.0;
               }
             }
 
             function animateOut() {
               if (isRemoving)
-                return
-              animInDelayTimer.stop()
-              resumeTimer.stop()
-              isRemoving = true
+                return;
+              animInDelayTimer.stop();
+              resumeTimer.stop();
+              isRemoving = true;
               if (!Settings.data.general.animationDisabled) {
-                slideOffset = slideOutOffset
-                scaleValue = 0.8
-                opacityValue = 0.0
+                slideOffset = slideOutOffset;
+                scaleValue = 0.8;
+                opacityValue = 0.0;
               }
             }
 
@@ -345,13 +352,13 @@ Variants {
               interval: Style.animationSlow
               repeat: false
               onTriggered: {
-                NotificationService.dismissActiveNotification(notificationId)
+                NotificationService.dismissActiveNotification(notificationId);
               }
             }
 
             onIsRemovingChanged: {
               if (isRemoving) {
-                removalTimer.start()
+                removalTimer.start();
               }
             }
 
@@ -393,23 +400,21 @@ Variants {
               RowLayout {
                 Layout.fillWidth: true
                 spacing: Style.marginL
-                Layout.margins: Style.marginM
+                Layout.leftMargin: Style.marginM * 2
+                Layout.rightMargin: Style.marginM * 2
+                Layout.topMargin: Style.marginM
+                Layout.bottomMargin: Style.marginM
 
-                ColumnLayout {
-                  NImageCircled {
-                    Layout.preferredWidth: Math.round(40 * Style.uiScaleRatio)
-                    Layout.preferredHeight: Math.round(40 * Style.uiScaleRatio)
-                    Layout.alignment: Qt.AlignTop
-                    Layout.topMargin: 30
-                    imagePath: model.originalImage || ""
-                    borderColor: Color.transparent
-                    borderWidth: 0
-                    fallbackIcon: "bell"
-                    fallbackIconSize: 24
-                  }
-                  Item {
-                    Layout.fillHeight: true
-                  }
+                NImageRounded {
+                  Layout.preferredWidth: Math.round(40 * Style.uiScaleRatio)
+                  Layout.preferredHeight: Math.round(40 * Style.uiScaleRatio)
+                  Layout.alignment: Qt.AlignVCenter
+                  radius: Math.min(Style.radiusL, Layout.preferredWidth / 2)
+                  imagePath: model.originalImage || ""
+                  borderColor: Color.transparent
+                  borderWidth: 0
+                  fallbackIcon: "bell"
+                  fallbackIconSize: 24
                 }
 
                 ColumnLayout {
@@ -430,9 +435,18 @@ Variants {
                     }
 
                     NText {
-                      text: `${model.appName || I18n.tr("system.unknown-app")} · ${Time.formatRelativeTime(model.timestamp)}`
-                      color: Color.mSecondary
+                      text: model.appName || "Unknown App"
                       pointSize: Style.fontSizeXS
+                      font.weight: Style.fontWeightBold
+                      color: Color.mSecondary
+                    }
+
+                    NText {
+                      textFormat: Text.PlainText
+                      text: " " + Time.formatRelativeTime(model.timestamp)
+                      pointSize: Style.fontSizeXXS
+                      color: Color.mOnSurfaceVariant
+                      Layout.alignment: Qt.AlignBottom
                     }
 
                     Item {
@@ -478,9 +492,9 @@ Variants {
                     property string parentNotificationId: notificationId
                     property var parsedActions: {
                       try {
-                        return model.actionsJson ? JSON.parse(model.actionsJson) : []
+                        return model.actionsJson ? JSON.parse(model.actionsJson) : [];
                       } catch (e) {
-                        return []
+                        return [];
                       }
                     }
                     visible: parsedActions.length > 0
@@ -495,11 +509,11 @@ Variants {
                         onExited: card.hoverCount--
 
                         text: {
-                          var actionText = actionData.text || "Open"
+                          var actionText = actionData.text || "Open";
                           if (actionText.includes(",")) {
-                            return actionText.split(",")[1] || actionText
+                            return actionText.split(",")[1] || actionText;
                           }
-                          return actionText
+                          return actionText;
                         }
                         fontSize: Style.fontSizeS
                         backgroundColor: Color.mPrimary
@@ -508,7 +522,7 @@ Variants {
                         outlined: false
                         implicitHeight: 24
                         onClicked: {
-                          NotificationService.invokeAction(parent.parentNotificationId, actionData.identifier)
+                          NotificationService.invokeAction(parent.parentNotificationId, actionData.identifier);
                         }
                       }
                     }
@@ -528,8 +542,8 @@ Variants {
               anchors.rightMargin: Style.marginXL
 
               onClicked: {
-                NotificationService.removeFromHistory(model.id)
-                animateOut()
+                NotificationService.removeFromHistory(model.id);
+                animateOut();
               }
             }
           }

@@ -1,9 +1,10 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import qs.Commons
 import qs.Services.Compositor
+import qs.Services.System
 import qs.Widgets
 
 ColumnLayout {
@@ -11,15 +12,15 @@ ColumnLayout {
 
   // Helper functions to update arrays immutably
   function addMonitor(list, name) {
-    const arr = (list || []).slice()
+    const arr = (list || []).slice();
     if (!arr.includes(name))
-      arr.push(name)
-    return arr
+      arr.push(name);
+    return arr;
   }
   function removeMonitor(list, name) {
     return (list || []).filter(function (n) {
-      return n !== name
-    })
+      return n !== name;
+    });
   }
 
   // General Notification Settings
@@ -49,25 +50,32 @@ ColumnLayout {
     NComboBox {
       label: I18n.tr("settings.notifications.settings.location.label")
       description: I18n.tr("settings.notifications.settings.location.description")
-      model: [{
+      model: [
+        {
           "key": "top",
           "name": I18n.tr("options.launcher.position.top_center")
-        }, {
+        },
+        {
           "key": "top_left",
           "name": I18n.tr("options.launcher.position.top_left")
-        }, {
+        },
+        {
           "key": "top_right",
           "name": I18n.tr("options.launcher.position.top_right")
-        }, {
+        },
+        {
           "key": "bottom",
           "name": I18n.tr("options.launcher.position.bottom_center")
-        }, {
+        },
+        {
           "key": "bottom_left",
           "name": I18n.tr("options.launcher.position.bottom_left")
-        }, {
+        },
+        {
           "key": "bottom_right",
           "name": I18n.tr("options.launcher.position.bottom_right")
-        }]
+        }
+      ]
       currentKey: Settings.data.notifications.location || "top_right"
       onSelected: key => Settings.data.notifications.location = key
     }
@@ -109,6 +117,206 @@ ColumnLayout {
     Layout.bottomMargin: Style.marginL
   }
 
+  // Sound Settings
+  ColumnLayout {
+    spacing: Style.marginL
+    Layout.fillWidth: true
+
+    NHeader {
+      label: I18n.tr("settings.notifications.sounds.section.label")
+      description: I18n.tr("settings.notifications.sounds.section.description")
+    }
+
+    // QtMultimedia unavailable message
+    NBox {
+      Layout.fillWidth: true
+      visible: !SoundService.multimediaAvailable
+      implicitHeight: unavailableContent.implicitHeight + Style.marginL * 2
+
+      RowLayout {
+        id: unavailableContent
+        anchors.fill: parent
+        anchors.margins: Style.marginL
+        spacing: Style.marginM
+
+        NIcon {
+          icon: "warning"
+          color: Color.mOnSurfaceVariant
+          pointSize: Style.fontSizeXL
+          Layout.alignment: Qt.AlignVCenter
+        }
+
+        NLabel {
+          Layout.fillWidth: true
+          label: I18n.tr("settings.notifications.sounds.unavailable.label")
+          description: I18n.tr("settings.notifications.sounds.unavailable.description")
+        }
+      }
+    }
+
+    NToggle {
+      label: I18n.tr("settings.notifications.sounds.enabled.label")
+      description: I18n.tr("settings.notifications.sounds.enabled.description")
+      checked: Settings.data.notifications?.sounds?.enabled ?? false
+      visible: SoundService.multimediaAvailable
+      onToggled: checked => Settings.data.notifications.sounds.enabled = checked
+    }
+
+    // Sound Volume
+    ColumnLayout {
+      spacing: Style.marginXXS
+      Layout.fillWidth: true
+      visible: SoundService.multimediaAvailable && (Settings.data.notifications?.sounds?.enabled ?? false)
+
+      NLabel {
+        label: I18n.tr("settings.notifications.sounds.volume.label")
+        description: I18n.tr("settings.notifications.sounds.volume.description")
+      }
+
+      NValueSlider {
+        Layout.fillWidth: true
+        from: 0
+        to: 100
+        stepSize: 1
+        value: (Settings.data.notifications?.sounds?.volume ?? 0.5) * 100
+        onMoved: value => Settings.data.notifications.sounds.volume = value / 100
+        text: Math.round((Settings.data.notifications?.sounds?.volume ?? 0.5) * 100) + "%"
+      }
+    }
+
+    // Separate Sounds Toggle
+    NToggle {
+      Layout.fillWidth: true
+      visible: SoundService.multimediaAvailable && (Settings.data.notifications?.sounds?.enabled ?? false)
+      label: I18n.tr("settings.notifications.sounds.separate.label")
+      description: I18n.tr("settings.notifications.sounds.separate.description")
+      checked: Settings.data.notifications?.sounds?.separateSounds ?? false
+      onToggled: checked => Settings.data.notifications.sounds.separateSounds = checked
+    }
+
+    // Unified Sound File (shown when separateSounds is false)
+    ColumnLayout {
+      spacing: Style.marginXXS
+      Layout.fillWidth: true
+      visible: SoundService.multimediaAvailable && (Settings.data.notifications?.sounds?.enabled ?? false) && !(Settings.data.notifications?.sounds?.separateSounds ?? false)
+
+      NLabel {
+        label: I18n.tr("settings.notifications.sounds.files.unified.label")
+        description: I18n.tr("settings.notifications.sounds.files.unified.description")
+      }
+
+      NTextInputButton {
+        Layout.fillWidth: true
+        placeholderText: I18n.tr("settings.notifications.sounds.files.placeholder")
+        text: Settings.data.notifications?.sounds?.normalSoundFile ?? ""
+        buttonIcon: "folder-open"
+        buttonTooltip: I18n.tr("settings.notifications.sounds.files.select-file")
+        onInputEditingFinished: {
+          const soundPath = text;
+          Settings.data.notifications.sounds.normalSoundFile = soundPath;
+          Settings.data.notifications.sounds.lowSoundFile = soundPath;
+          Settings.data.notifications.sounds.criticalSoundFile = soundPath;
+        }
+        onButtonClicked: unifiedSoundFilePicker.open()
+      }
+    }
+
+    // Separate Sound Files (shown when separateSounds is true)
+    ColumnLayout {
+      spacing: Style.marginXXS
+      Layout.fillWidth: true
+      visible: SoundService.multimediaAvailable && (Settings.data.notifications?.sounds?.enabled ?? false) && (Settings.data.notifications?.sounds?.separateSounds ?? false)
+
+      // Low Urgency Sound File
+      ColumnLayout {
+        spacing: Style.marginXXS
+        Layout.fillWidth: true
+
+        NLabel {
+          label: I18n.tr("settings.notifications.sounds.files.low.label")
+          description: I18n.tr("settings.notifications.sounds.files.low.description")
+        }
+
+        NTextInputButton {
+          Layout.fillWidth: true
+          placeholderText: I18n.tr("settings.notifications.sounds.files.placeholder")
+          text: Settings.data.notifications?.sounds?.lowSoundFile ?? ""
+          buttonIcon: "folder-open"
+          buttonTooltip: I18n.tr("settings.notifications.sounds.files.select-file")
+          onInputEditingFinished: Settings.data.notifications.sounds.lowSoundFile = text
+          onButtonClicked: lowSoundFilePicker.open()
+        }
+      }
+
+      // Normal Urgency Sound File
+      ColumnLayout {
+        spacing: Style.marginXXS
+        Layout.fillWidth: true
+
+        NLabel {
+          label: I18n.tr("settings.notifications.sounds.files.normal.label")
+          description: I18n.tr("settings.notifications.sounds.files.normal.description")
+        }
+
+        NTextInputButton {
+          Layout.fillWidth: true
+          placeholderText: I18n.tr("settings.notifications.sounds.files.placeholder")
+          text: Settings.data.notifications?.sounds?.normalSoundFile ?? ""
+          buttonIcon: "folder-open"
+          buttonTooltip: I18n.tr("settings.notifications.sounds.files.select-file")
+          onInputEditingFinished: Settings.data.notifications.sounds.normalSoundFile = text
+          onButtonClicked: normalSoundFilePicker.open()
+        }
+      }
+
+      // Critical Urgency Sound File
+      ColumnLayout {
+        spacing: Style.marginXXS
+        Layout.fillWidth: true
+
+        NLabel {
+          label: I18n.tr("settings.notifications.sounds.files.critical.label")
+          description: I18n.tr("settings.notifications.sounds.files.critical.description")
+        }
+
+        NTextInputButton {
+          Layout.fillWidth: true
+          placeholderText: I18n.tr("settings.notifications.sounds.files.placeholder")
+          text: Settings.data.notifications?.sounds?.criticalSoundFile ?? ""
+          buttonIcon: "folder-open"
+          buttonTooltip: I18n.tr("settings.notifications.sounds.files.select-file")
+          onInputEditingFinished: Settings.data.notifications.sounds.criticalSoundFile = text
+          onButtonClicked: criticalSoundFilePicker.open()
+        }
+      }
+    }
+  }
+
+  // Excluded Apps List
+  ColumnLayout {
+    spacing: Style.marginXXS
+    Layout.fillWidth: true
+    visible: SoundService.multimediaAvailable && (Settings.data.notifications?.sounds?.enabled ?? false)
+
+    NLabel {
+      label: I18n.tr("settings.notifications.sounds.excluded-apps.label")
+      description: I18n.tr("settings.notifications.sounds.excluded-apps.description")
+    }
+
+    NTextInput {
+      Layout.fillWidth: true
+      placeholderText: I18n.tr("settings.notifications.sounds.excluded-apps.placeholder")
+      text: Settings.data.notifications?.sounds?.excludedApps ?? ""
+      onEditingFinished: Settings.data.notifications.sounds.excludedApps = text
+    }
+  }
+
+  NDivider {
+    Layout.fillWidth: true
+    Layout.topMargin: Style.marginL
+    Layout.bottomMargin: Style.marginL
+  }
+
   // Duration
   ColumnLayout {
     spacing: Style.marginL
@@ -137,14 +345,33 @@ ColumnLayout {
         description: I18n.tr("settings.notifications.duration.low-urgency.description")
       }
 
-      NValueSlider {
+      RowLayout {
+        spacing: Style.marginL
         Layout.fillWidth: true
-        from: 1
-        to: 30
-        stepSize: 1
-        value: Settings.data.notifications.lowUrgencyDuration
-        onMoved: value => Settings.data.notifications.lowUrgencyDuration = value
-        text: Settings.data.notifications.lowUrgencyDuration + "s"
+
+        NValueSlider {
+          Layout.fillWidth: true
+          from: 1
+          to: 30
+          stepSize: 1
+          value: Settings.data.notifications.lowUrgencyDuration
+          onMoved: value => Settings.data.notifications.lowUrgencyDuration = value
+          text: Settings.data.notifications.lowUrgencyDuration + "s"
+        }
+        // Reset button container
+        Item {
+          Layout.preferredWidth: 30 * Style.uiScaleRatio
+          Layout.preferredHeight: 30 * Style.uiScaleRatio
+
+          NIconButton {
+            icon: "refresh"
+            baseSize: Style.baseWidgetSize * 0.8
+            tooltipText: I18n.tr("settings.notifications.duration.reset")
+            onClicked: Settings.data.notifications.lowUrgencyDuration = 3
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+          }
+        }
       }
     }
 
@@ -158,14 +385,34 @@ ColumnLayout {
         description: I18n.tr("settings.notifications.duration.normal-urgency.description")
       }
 
-      NValueSlider {
+      RowLayout {
+        spacing: Style.marginL
         Layout.fillWidth: true
-        from: 1
-        to: 30
-        stepSize: 1
-        value: Settings.data.notifications.normalUrgencyDuration
-        onMoved: value => Settings.data.notifications.normalUrgencyDuration = value
-        text: Settings.data.notifications.normalUrgencyDuration + "s"
+
+        NValueSlider {
+          Layout.fillWidth: true
+          from: 1
+          to: 30
+          stepSize: 1
+          value: Settings.data.notifications.normalUrgencyDuration
+          onMoved: value => Settings.data.notifications.normalUrgencyDuration = value
+          text: Settings.data.notifications.normalUrgencyDuration + "s"
+        }
+
+        // Reset button container
+        Item {
+          Layout.preferredWidth: 30 * Style.uiScaleRatio
+          Layout.preferredHeight: 30 * Style.uiScaleRatio
+
+          NIconButton {
+            icon: "refresh"
+            baseSize: Style.baseWidgetSize * 0.8
+            tooltipText: I18n.tr("settings.notifications.duration.reset")
+            onClicked: Settings.data.notifications.normalUrgencyDuration = 8
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+          }
+        }
       }
     }
 
@@ -179,14 +426,33 @@ ColumnLayout {
         description: I18n.tr("settings.notifications.duration.critical-urgency.description")
       }
 
-      NValueSlider {
+      RowLayout {
+        spacing: Style.marginL
         Layout.fillWidth: true
-        from: 1
-        to: 30
-        stepSize: 1
-        value: Settings.data.notifications.criticalUrgencyDuration
-        onMoved: value => Settings.data.notifications.criticalUrgencyDuration = value
-        text: Settings.data.notifications.criticalUrgencyDuration + "s"
+
+        NValueSlider {
+          Layout.fillWidth: true
+          from: 1
+          to: 30
+          stepSize: 1
+          value: Settings.data.notifications.criticalUrgencyDuration
+          onMoved: value => Settings.data.notifications.criticalUrgencyDuration = value
+          text: Settings.data.notifications.criticalUrgencyDuration + "s"
+        }
+        // Reset button container
+        Item {
+          Layout.preferredWidth: 30 * Style.uiScaleRatio
+          Layout.preferredHeight: 30 * Style.uiScaleRatio
+
+          NIconButton {
+            icon: "refresh"
+            baseSize: Style.baseWidgetSize * 0.8
+            tooltipText: I18n.tr("settings.notifications.duration.reset")
+            onClicked: Settings.data.notifications.criticalUrgencyDuration = 15
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+          }
+        }
       }
     }
 
@@ -208,23 +474,42 @@ ColumnLayout {
         Layout.fillWidth: true
         label: modelData.name || I18n.tr("system.unknown")
         description: {
-          const compositorScale = CompositorService.getDisplayScale(modelData.name)
+          const compositorScale = CompositorService.getDisplayScale(modelData.name);
           I18n.tr("system.monitor-description", {
                     "model": modelData.model,
                     "width": modelData.width * compositorScale,
                     "height": modelData.height * compositorScale,
                     "scale": compositorScale
-                  })
+                  });
         }
         checked: (Settings.data.notifications.monitors || []).indexOf(modelData.name) !== -1
         onToggled: checked => {
                      if (checked) {
-                       Settings.data.notifications.monitors = addMonitor(Settings.data.notifications.monitors, modelData.name)
+                       Settings.data.notifications.monitors = addMonitor(Settings.data.notifications.monitors, modelData.name);
                      } else {
-                       Settings.data.notifications.monitors = removeMonitor(Settings.data.notifications.monitors, modelData.name)
+                       Settings.data.notifications.monitors = removeMonitor(Settings.data.notifications.monitors, modelData.name);
                      }
                    }
       }
+    }
+
+    NDivider {
+      Layout.fillWidth: true
+      Layout.topMargin: Style.marginL
+      Layout.bottomMargin: Style.marginL
+    }
+
+    // Toast Configuration
+    NHeader {
+      label: I18n.tr("settings.notifications.toast.section.label")
+      description: I18n.tr("settings.notifications.toast.section.description")
+    }
+
+    NToggle {
+      label: I18n.tr("settings.notifications.toast.keyboard.label")
+      description: I18n.tr("settings.notifications.toast.keyboard.description")
+      checked: Settings.data.notifications.enableKeyboardLayoutToast
+      onToggled: checked => Settings.data.notifications.enableKeyboardLayoutToast = checked
     }
   }
 
@@ -232,5 +517,61 @@ ColumnLayout {
     Layout.fillWidth: true
     Layout.topMargin: Style.marginL
     Layout.bottomMargin: Style.marginL
+  }
+
+  // File Pickers for Sound Files
+  NFilePicker {
+    id: unifiedSoundFilePicker
+    title: I18n.tr("settings.notifications.sounds.files.unified.select-title")
+    selectionMode: "files"
+    initialPath: Quickshell.env("HOME")
+    nameFilters: ["*.wav", "*.mp3", "*.ogg", "*.flac", "*.m4a", "*.aac"]
+    onAccepted: paths => {
+                  if (paths.length > 0) {
+                    const soundPath = paths[0];
+                    Settings.data.notifications.sounds.normalSoundFile = soundPath;
+                    Settings.data.notifications.sounds.lowSoundFile = soundPath;
+                    Settings.data.notifications.sounds.criticalSoundFile = soundPath;
+                  }
+                }
+  }
+
+  NFilePicker {
+    id: lowSoundFilePicker
+    title: I18n.tr("settings.notifications.sounds.files.low.select-title")
+    selectionMode: "files"
+    initialPath: Quickshell.env("HOME")
+    nameFilters: ["*.wav", "*.mp3", "*.ogg", "*.flac", "*.m4a", "*.aac"]
+    onAccepted: paths => {
+                  if (paths.length > 0) {
+                    Settings.data.notifications.sounds.lowSoundFile = paths[0];
+                  }
+                }
+  }
+
+  NFilePicker {
+    id: normalSoundFilePicker
+    title: I18n.tr("settings.notifications.sounds.files.normal.select-title")
+    selectionMode: "files"
+    initialPath: Quickshell.env("HOME")
+    nameFilters: ["*.wav", "*.mp3", "*.ogg", "*.flac", "*.m4a", "*.aac"]
+    onAccepted: paths => {
+                  if (paths.length > 0) {
+                    Settings.data.notifications.sounds.normalSoundFile = paths[0];
+                  }
+                }
+  }
+
+  NFilePicker {
+    id: criticalSoundFilePicker
+    title: I18n.tr("settings.notifications.sounds.files.critical.select-title")
+    selectionMode: "files"
+    initialPath: Quickshell.env("HOME")
+    nameFilters: ["*.wav", "*.mp3", "*.ogg", "*.flac", "*.m4a", "*.aac"]
+    onAccepted: paths => {
+                  if (paths.length > 0) {
+                    Settings.data.notifications.sounds.criticalSoundFile = paths[0];
+                  }
+                }
   }
 }

@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
@@ -26,7 +26,7 @@ Loader {
         target: BarService
         function onBarReadyChanged(screenName) {
           if (screenName === modelData.name) {
-            barIsReady = true
+            barIsReady = true;
           }
         }
       }
@@ -35,7 +35,7 @@ Loader {
       Connections {
         target: ToplevelManager ? ToplevelManager.toplevels : null
         function onValuesChanged() {
-          updateDockApps()
+          updateDockApps();
         }
       }
 
@@ -43,17 +43,17 @@ Loader {
       Connections {
         target: Settings.data.dock
         function onPinnedAppsChanged() {
-          updateDockApps()
+          updateDockApps();
         }
         function onOnlySameOutputChanged() {
-          updateDockApps()
+          updateDockApps();
         }
       }
 
       // Initial update when component is ready
       Component.onCompleted: {
         if (ToplevelManager) {
-          updateDockApps()
+          updateDockApps();
         }
       }
 
@@ -93,48 +93,104 @@ Loader {
       // Function to close any open context menu
       function closeAllContextMenus() {
         if (currentContextMenu && currentContextMenu.visible) {
-          currentContextMenu.hide()
+          currentContextMenu.hide();
         }
+      }
+
+      // Helper function to normalize app IDs for case-insensitive matching
+      function normalizeAppId(appId) {
+        if (!appId || typeof appId !== 'string')
+          return "";
+        return appId.toLowerCase().trim();
+      }
+
+      // Helper function to check if an app ID matches a pinned app (case-insensitive)
+      function isAppIdPinned(appId, pinnedApps) {
+        if (!appId || !pinnedApps || pinnedApps.length === 0)
+          return false;
+        const normalizedId = normalizeAppId(appId);
+        return pinnedApps.some(pinnedId => normalizeAppId(pinnedId) === normalizedId);
+      }
+
+      // Helper function to get app name from desktop entry
+      function getAppNameFromDesktopEntry(appId) {
+        if (!appId)
+          return appId;
+
+        try {
+          if (typeof DesktopEntries !== 'undefined' && DesktopEntries.heuristicLookup) {
+            const entry = DesktopEntries.heuristicLookup(appId);
+            if (entry && entry.name) {
+              return entry.name;
+            }
+          }
+
+          if (typeof DesktopEntries !== 'undefined' && DesktopEntries.byId) {
+            const entry = DesktopEntries.byId(appId);
+            if (entry && entry.name) {
+              return entry.name;
+            }
+          }
+        } catch (e)
+          // Fall through to return original appId
+        {}
+
+        // Return original appId if we can't find a desktop entry
+        return appId;
       }
 
       // Function to update the combined dock apps model
       function updateDockApps() {
-        const runningApps = ToplevelManager ? (ToplevelManager.toplevels.values || []) : []
-        const pinnedApps = Settings.data.dock.pinnedApps || []
-        const combined = []
-        const processedAppIds = new Set()
+        const runningApps = ToplevelManager ? (ToplevelManager.toplevels.values || []) : [];
+        const pinnedApps = Settings.data.dock.pinnedApps || [];
+        const combined = [];
+        const processedAppIds = new Set();
 
-        // Strategy: Maintain app positions as much as possible
-        // 1. First pass: Add all running apps (both pinned and non-pinned) in their current order
-        runningApps.forEach(toplevel => {
-                              if (toplevel && toplevel.appId && !(Settings.data.dock.onlySameOutput && toplevel.screens && !toplevel.screens.includes(modelData))) {
-                                const isPinned = pinnedApps.includes(toplevel.appId)
-                                const appType = isPinned ? "pinned-running" : "running"
+        //push an app onto combined with the given appType
+        function pushApp(appType, toplevel, appId, title) {
+          if (!processedAppIds.has(appId) && !(toplevel && Settings.data.dock.onlySameOutput && toplevel.screens && !toplevel.screens.includes(modelData))) {
+            combined.push({
+                            "type": appType,
+                            "toplevel": toplevel,
+                            "appId": appId,
+                            "title": title
+                          });
+            processedAppIds.add(appId);
+          }
+        }
 
-                                combined.push({
-                                                "type": appType,
-                                                "toplevel": toplevel,
-                                                "appId": toplevel.appId,
-                                                "title": toplevel.title
-                                              })
-                                processedAppIds.add(toplevel.appId)
-                              }
-                            })
+        function pushRunning(first) {
+          runningApps.forEach(toplevel => {
+                                if (toplevel) {
+                                  pushApp((first && pinnedApps.includes(toplevel.appId)) ? "pinned-running" : "running", toplevel, toplevel.appId, toplevel.title);
+                                }
+                              });
+        }
 
-        // 2. Second pass: Add non-running pinned apps at the end
-        pinnedApps.forEach(pinnedAppId => {
-                             if (!processedAppIds.has(pinnedAppId)) {
-                               // Pinned app that is not running
-                               combined.push({
-                                               "type": "pinned",
-                                               "toplevel": null,
-                                               "appId": pinnedAppId,
-                                               "title": pinnedAppId
-                                             })
-                             }
-                           })
+        function pushPinned() {
+          pinnedApps.forEach(pinnedAppId => {
+                               var toplevel = null;
+                               for (var app of runningApps) {
+                                 if (app.appId === pinnedAppId) {
+                                   toplevel = app;
+                                 }
+                               }
+                               pushApp(toplevel ? "pinned-running" : "pinned", toplevel, pinnedAppId, toplevel ? toplevel.title : pinnedAppId);
+                             });
+        }
 
-        dockApps = combined
+        //if pinnedStatic then push all pinned and then all remaining running apps
+        if (Settings.data.dock.pinnedStatic) {
+          pushPinned();
+          pushRunning(false);
+
+          //else add all running apps and then remaining pinned apps
+        } else {
+          pushRunning(true);
+          pushPinned();
+        }
+
+        dockApps = combined;
       }
 
       // Timer to unload dock after hide animation completes
@@ -143,7 +199,7 @@ Loader {
         interval: hideAnimationDuration + 50 // Add small buffer
         onTriggered: {
           if (hidden && autoHide) {
-            dockLoaded = false
+            dockLoaded = false;
           }
         }
       }
@@ -155,14 +211,14 @@ Loader {
         onTriggered: {
           // Force menuHovered to false if no menu is current or visible
           if (!root.currentContextMenu || !root.currentContextMenu.visible) {
-            menuHovered = false
+            menuHovered = false;
           }
           if (autoHide && !dockHovered && !anyAppHovered && !peekHovered && !menuHovered) {
-            hidden = true
-            unloadTimer.restart() // Start unload timer when hiding
+            hidden = true;
+            unloadTimer.restart(); // Start unload timer when hiding
           } else if (autoHide && !dockHovered && !peekHovered) {
             // Restart timer if menu is closing (handles race condition)
-            restart()
+            restart();
           }
         }
       }
@@ -173,9 +229,9 @@ Loader {
         interval: showDelay
         onTriggered: {
           if (autoHide) {
-            dockLoaded = true // Load dock immediately
-            hidden = false // Then trigger show animation
-            unloadTimer.stop() // Cancel any pending unload
+            dockLoaded = true; // Load dock immediately
+            hidden = false; // Then trigger show animation
+            unloadTimer.stop(); // Cancel any pending unload
           }
         }
       }
@@ -183,14 +239,14 @@ Loader {
       // Watch for autoHide setting changes
       onAutoHideChanged: {
         if (!autoHide) {
-          hidden = false
-          dockLoaded = true
-          hideTimer.stop()
-          showTimer.stop()
-          unloadTimer.stop()
+          hidden = false;
+          dockLoaded = true;
+          hideTimer.stop();
+          showTimer.stop();
+          unloadTimer.stop();
         } else {
-          hidden = true
-          unloadTimer.restart() // Schedule unload after animation
+          hidden = true;
+          unloadTimer.restart(); // Schedule unload after animation
         }
       }
 
@@ -218,16 +274,16 @@ Loader {
             hoverEnabled: true
 
             onEntered: {
-              peekHovered = true
+              peekHovered = true;
               if (hidden) {
-                showTimer.start()
+                showTimer.start();
               }
             }
 
             onExited: {
-              peekHovered = false
+              peekHovered = false;
               if (!hidden && !dockHovered && !anyAppHovered && !menuHovered) {
-                hideTimer.restart()
+                hideTimer.restart();
               }
             }
           }
@@ -260,9 +316,9 @@ Loader {
           margins.bottom: {
             switch (Settings.data.bar.position) {
             case "bottom":
-              return (Style.barHeight + Style.marginM) + (Settings.data.bar.floating ? Settings.data.bar.marginVertical * Style.marginXL + floatingMargin : floatingMargin)
+              return (Style.barHeight + Style.marginM) + (Settings.data.bar.floating ? Settings.data.bar.marginVertical * Style.marginXL + floatingMargin : floatingMargin);
             default:
-              return floatingMargin
+              return floatingMargin;
             }
           }
 
@@ -313,24 +369,24 @@ Loader {
                 hoverEnabled: true
 
                 onEntered: {
-                  dockHovered = true
+                  dockHovered = true;
                   if (autoHide) {
-                    showTimer.stop()
-                    hideTimer.stop()
-                    unloadTimer.stop() // Cancel unload if hovering
+                    showTimer.stop();
+                    hideTimer.stop();
+                    unloadTimer.stop(); // Cancel unload if hovering
                   }
                 }
 
                 onExited: {
-                  dockHovered = false
+                  dockHovered = false;
                   if (autoHide && !anyAppHovered && !peekHovered && !menuHovered) {
-                    hideTimer.restart()
+                    hideTimer.restart();
                   }
                 }
 
                 onClicked: {
                   // Close any open context menu when clicking on the dock background
-                  closeAllContextMenus()
+                  closeAllContextMenus();
                 }
               }
 
@@ -342,8 +398,8 @@ Loader {
 
                 function getAppIcon(appData): string {
                   if (!appData || !appData.appId)
-                    return ""
-                  return ThemeIcons.iconForAppId(appData.appId?.toLowerCase())
+                    return "";
+                  return ThemeIcons.iconForAppId(appData.appId?.toLowerCase());
                 }
 
                 RowLayout {
@@ -364,14 +420,28 @@ Loader {
                       property bool isActive: modelData.toplevel && ToplevelManager.activeToplevel && ToplevelManager.activeToplevel === modelData.toplevel
                       property bool hovered: appMouseArea.containsMouse
                       property string appId: modelData ? modelData.appId : ""
-                      property string appTitle: modelData ? (modelData.title || modelData.appId) : ""
+                      property string appTitle: {
+                        if (!modelData)
+                          return "";
+                        // For running apps, use the toplevel title directly (reactive)
+                        if (modelData.toplevel) {
+                          const toplevelTitle = modelData.toplevel.title || "";
+                          // If title is "Loading..." or empty, use desktop entry name
+                          if (!toplevelTitle || toplevelTitle === "Loading..." || toplevelTitle.trim() === "") {
+                            return root.getAppNameFromDesktopEntry(modelData.appId) || modelData.appId;
+                          }
+                          return toplevelTitle;
+                        }
+                        // For pinned apps that aren't running, use the stored title
+                        return modelData.title || modelData.appId || "";
+                      }
                       property bool isRunning: modelData && (modelData.type === "running" || modelData.type === "pinned-running")
 
                       // Listen for the toplevel being closed
                       Connections {
                         target: modelData?.toplevel
                         function onClosed() {
-                          Qt.callLater(root.updateDockApps)
+                          Qt.callLater(root.updateDockApps);
                         }
                       }
 
@@ -391,7 +461,7 @@ Loader {
                         cache: true
 
                         // Dim pinned apps that aren't running
-                        opacity: appButton.isRunning ? 1.0 : 0.6
+                        opacity: appButton.isRunning ? 1.0 : Settings.data.dock.deadOpacity
 
                         scale: appButton.hovered ? 1.15 : 1.0
 
@@ -452,9 +522,9 @@ Loader {
                         onHoveredChanged: {
                           // Only update menuHovered if this menu is current and visible
                           if (root.currentContextMenu === contextMenu && contextMenu.visible) {
-                            menuHovered = hovered
+                            menuHovered = hovered;
                           } else {
-                            menuHovered = false
+                            menuHovered = false;
                           }
                         }
 
@@ -462,26 +532,26 @@ Loader {
                           target: contextMenu
                           function onRequestClose() {
                             // Clear current menu immediately to prevent hover updates
-                            root.currentContextMenu = null
-                            hideTimer.stop()
-                            contextMenu.hide()
-                            menuHovered = false
-                            anyAppHovered = false
+                            root.currentContextMenu = null;
+                            hideTimer.stop();
+                            contextMenu.hide();
+                            menuHovered = false;
+                            anyAppHovered = false;
                           }
                         }
                         onAppClosed: root.updateDockApps // Force immediate dock update when app is closed
                         onVisibleChanged: {
                           if (visible) {
-                            root.currentContextMenu = contextMenu
-                            anyAppHovered = false
+                            root.currentContextMenu = contextMenu;
+                            anyAppHovered = false;
                           } else if (root.currentContextMenu === contextMenu) {
-                            root.currentContextMenu = null
-                            hideTimer.stop()
-                            menuHovered = false
-                            anyAppHovered = false
+                            root.currentContextMenu = null;
+                            hideTimer.stop();
+                            menuHovered = false;
+                            anyAppHovered = false;
                             // Restart hide timer after menu closes
                             if (autoHide && !dockHovered && !anyAppHovered && !peekHovered && !menuHovered) {
-                              hideTimer.restart()
+                              hideTimer.restart();
                             }
                           }
                         }
@@ -496,28 +566,28 @@ Loader {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
 
                         onEntered: {
-                          anyAppHovered = true
-                          const appName = appButton.appTitle || appButton.appId || "Unknown"
-                          const tooltipText = appName.length > 40 ? appName.substring(0, 37) + "..." : appName
+                          anyAppHovered = true;
+                          const appName = appButton.appTitle || appButton.appId || "Unknown";
+                          const tooltipText = appName.length > 40 ? appName.substring(0, 37) + "..." : appName;
                           if (!contextMenu.visible) {
-                            TooltipService.show(Screen, appButton, tooltipText, "top")
+                            TooltipService.show(appButton, tooltipText, "top");
                           }
                           if (autoHide) {
-                            showTimer.stop()
-                            hideTimer.stop()
-                            unloadTimer.stop() // Cancel unload if hovering app
+                            showTimer.stop();
+                            hideTimer.stop();
+                            unloadTimer.stop(); // Cancel unload if hovering app
                           }
                         }
 
                         onExited: {
-                          anyAppHovered = false
-                          TooltipService.hide()
+                          anyAppHovered = false;
+                          TooltipService.hide();
                           // Clear menuHovered if no current menu or menu not visible
                           if (!root.currentContextMenu || !root.currentContextMenu.visible) {
-                            menuHovered = false
+                            menuHovered = false;
                           }
                           if (autoHide && !dockHovered && !peekHovered && !menuHovered) {
-                            hideTimer.restart()
+                            hideTimer.restart();
                           }
                         }
 
@@ -525,33 +595,67 @@ Loader {
                           if (mouse.button === Qt.RightButton) {
                             // If right-clicking on the same app with an open context menu, close it
                             if (root.currentContextMenu === contextMenu && contextMenu.visible) {
-                              root.closeAllContextMenus()
-                              return
+                              root.closeAllContextMenus();
+                              return;
                             }
                             // Close any other existing context menu first
-                            root.closeAllContextMenus()
+                            root.closeAllContextMenus();
                             // Hide tooltip when showing context menu
-                            TooltipService.hideImmediately()
-                            contextMenu.show(appButton, modelData.toplevel || modelData)
-                            return
+                            TooltipService.hideImmediately();
+                            contextMenu.show(appButton, modelData.toplevel || modelData);
+                            return;
                           }
 
                           // Close any existing context menu for non-right-click actions
-                          root.closeAllContextMenus()
+                          root.closeAllContextMenus();
 
                           // Check if toplevel is still valid (not a stale reference)
-                          const isValidToplevel = modelData?.toplevel && ToplevelManager && ToplevelManager.toplevels.values.includes(modelData.toplevel)
+                          const isValidToplevel = modelData?.toplevel && ToplevelManager && ToplevelManager.toplevels.values.includes(modelData.toplevel);
 
                           if (mouse.button === Qt.MiddleButton && isValidToplevel && modelData.toplevel.close) {
-                            modelData.toplevel.close()
-                            Qt.callLater(root.updateDockApps) // Force immediate dock update
+                            modelData.toplevel.close();
+                            Qt.callLater(root.updateDockApps); // Force immediate dock update
                           } else if (mouse.button === Qt.LeftButton) {
                             if (isValidToplevel && modelData.toplevel.activate) {
                               // Running app - activate it
-                              modelData.toplevel.activate()
+                              modelData.toplevel.activate();
                             } else if (modelData?.appId) {
                               // Pinned app not running - launch it
-                              Quickshell.execDetached(["gtk-launch", modelData.appId])
+                              const app = DesktopEntries.byId(modelData.appId);
+
+                              if (Settings.data.appLauncher.customLaunchPrefixEnabled && Settings.data.appLauncher.customLaunchPrefix) {
+                                // Use custom launch prefix
+                                const prefix = Settings.data.appLauncher.customLaunchPrefix.split(" ");
+
+                                if (app.runInTerminal) {
+                                  const terminal = Settings.data.appLauncher.terminalCommand.split(" ");
+                                  const command = prefix.concat(terminal.concat(app.command));
+                                  Quickshell.execDetached(command);
+                                } else {
+                                  const command = prefix.concat(app.command);
+                                  Quickshell.execDetached(command);
+                                }
+                              } else if (Settings.data.appLauncher.useApp2Unit && app.id) {
+                                Logger.d("Dock", `Using app2unit for: ${app.id}`);
+                                if (app.runInTerminal)
+                                  Quickshell.execDetached(["app2unit", "--", app.id + ".desktop"]);
+                                else
+                                  Quickshell.execDetached(["app2unit", "--"].concat(app.command));
+                              } else {
+                                // Fallback logic when app2unit is not used
+                                if (app.runInTerminal) {
+                                  // If app.execute() fails for terminal apps, we handle it manually.
+                                  Logger.d("Dock", "Executing terminal app manually: " + app.name);
+                                  const terminal = Settings.data.appLauncher.terminalCommand.split(" ");
+                                  const command = terminal.concat(app.command);
+                                  Quickshell.execDetached(command);
+                                } else if (app.execute) {
+                                  // Default execution for GUI apps
+                                  app.execute();
+                                } else {
+                                  Logger.w("Dock", `Could not launch: ${app.name}. No valid launch method.`);
+                                }
+                              }
                             }
                           }
                         }
@@ -559,7 +663,7 @@ Loader {
 
                       // Active indicator
                       Rectangle {
-                        visible: isActive
+                        visible: Settings.data.dock.inactiveIndicators ? isRunning : isActive
                         width: iconSize * 0.2
                         height: iconSize * 0.1
                         color: Color.mPrimary

@@ -27,9 +27,16 @@ Singleton {
   property bool codeAvailable: false
   property bool gnomeCalendarAvailable: false
   property bool spicetifyAvailable: false
+  property bool telegramAvailable: false
+  property bool cavaAvailable: false
+  property bool emacsAvailable: false
+  property bool niriAvailable: false
 
   // Discord client auto-detection
   property var availableDiscordClients: []
+
+  // Code client auto-detection
+  property var availableCodeClients: []
 
   // Signal emitted when all checks are complete
   signal checksCompleted
@@ -37,25 +44,29 @@ Singleton {
   // Function to detect Discord client by checking config directories
   function detectDiscordClient() {
     // Build shell script to check each client
-    var scriptParts = ["available_clients=\"\";"]
+    var scriptParts = ["available_clients=\"\";"];
 
     for (var i = 0; i < TemplateRegistry.discordClients.length; i++) {
-      var client = TemplateRegistry.discordClients[i]
-      var clientName = client.name
+      var client = TemplateRegistry.discordClients[i];
+      var clientName = client.name;
+      var configPath = client.configPath;
+
+      // Use the actual config path from the client, removing ~ prefix
+      var checkPath = configPath.startsWith("~") ? configPath.substring(2) : configPath.substring(1);
 
       // Check if this client requires themes folder to exist
       if (client.requiresThemesFolder) {
-        scriptParts.push("if [ -d \"$HOME/.config/" + clientName + "/themes\" ]; then available_clients=\"$available_clients " + clientName + "\"; fi;")
+        scriptParts.push("if [ -d \"$HOME/" + checkPath + "/themes\" ]; then available_clients=\"$available_clients " + clientName + "\"; fi;");
       } else {
-        scriptParts.push("if [ -d \"$HOME/.config/" + clientName + "\" ]; then available_clients=\"$available_clients " + clientName + "\"; fi;")
+        scriptParts.push("if [ -d \"$HOME/" + checkPath + "\" ]; then available_clients=\"$available_clients " + clientName + "\"; fi;");
       }
     }
 
-    scriptParts.push("echo \"$available_clients\"")
+    scriptParts.push("echo \"$available_clients\"");
 
     // Use a Process to check directory existence for all clients
-    discordDetector.command = ["sh", "-c", scriptParts.join(" ")]
-    discordDetector.running = true
+    discordDetector.command = ["sh", "-c", scriptParts.join(" ")];
+    discordDetector.running = true;
   }
 
   // Process to detect Discord client directories
@@ -64,32 +75,92 @@ Singleton {
     running: false
 
     onExited: function (exitCode) {
-      availableDiscordClients = []
+      availableDiscordClients = [];
 
       if (exitCode === 0) {
         var detectedClients = stdout.text.trim().split(/\s+/).filter(function (client) {
-          return client.length > 0
-        })
+          return client.length > 0;
+        });
 
         if (detectedClients.length > 0) {
           // Build list of available clients
           for (var i = 0; i < detectedClients.length; i++) {
-            var clientName = detectedClients[i]
+            var clientName = detectedClients[i];
             for (var j = 0; j < TemplateRegistry.discordClients.length; j++) {
-              var client = TemplateRegistry.discordClients[j]
+              var client = TemplateRegistry.discordClients[j];
               if (client.name === clientName) {
-                availableDiscordClients.push(client)
-                break
+                availableDiscordClients.push(client);
+                break;
               }
             }
           }
 
-          Logger.i("ProgramChecker", "Detected Discord clients:", detectedClients.join(", "))
+          Logger.d("ProgramChecker", "Detected Discord clients:", detectedClients.join(", "));
         }
       }
 
       if (availableDiscordClients.length === 0) {
-        Logger.d("ProgramChecker", "No Discord clients detected")
+        Logger.d("ProgramChecker", "No Discord clients detected");
+      }
+    }
+
+    stdout: StdioCollector {}
+    stderr: StdioCollector {}
+  }
+
+  // Function to detect Code client by checking config directories
+  function detectCodeClient() {
+    // Build shell script to check each client
+    var scriptParts = ["available_clients=\"\";"];
+
+    for (var i = 0; i < TemplateRegistry.codeClients.length; i++) {
+      var client = TemplateRegistry.codeClients[i];
+      var clientName = client.name;
+      var configPath = client.configPath;
+
+      // Check if the config directory exists
+      scriptParts.push("if [ -d \"$HOME" + configPath.substring(1) + "\" ]; then available_clients=\"$available_clients " + clientName + "\"; fi;");
+    }
+
+    scriptParts.push("echo \"$available_clients\"");
+
+    // Use a Process to check directory existence for all clients
+    codeDetector.command = ["sh", "-c", scriptParts.join(" ")];
+    codeDetector.running = true;
+  }
+
+  // Process to detect Code client directories
+  Process {
+    id: codeDetector
+    running: false
+
+    onExited: function (exitCode) {
+      availableCodeClients = [];
+
+      if (exitCode === 0) {
+        var detectedClients = stdout.text.trim().split(/\s+/).filter(function (client) {
+          return client.length > 0;
+        });
+
+        if (detectedClients.length > 0) {
+          // Build list of available clients
+          for (var i = 0; i < detectedClients.length; i++) {
+            var clientName = detectedClients[i];
+            for (var j = 0; j < TemplateRegistry.codeClients.length; j++) {
+              var client = TemplateRegistry.codeClients[j];
+              if (client.name === clientName) {
+                availableCodeClients.push(client);
+                break;
+              }
+            }
+          }
+
+          Logger.d("ProgramChecker", "Detected Code clients:", detectedClients.join(", "));
+        }
+      }
+
+      if (availableCodeClients.length === 0) {
+        Logger.d("ProgramChecker", "No Code clients detected");
       }
     }
 
@@ -114,7 +185,11 @@ Singleton {
                                             "wlsunsetAvailable": ["which", "wlsunset"],
                                             "codeAvailable": ["which", "code"],
                                             "gnomeCalendarAvailable": ["which", "gnome-calendar"],
-                                            "spicetifyAvailable": ["which", "spicetify"]
+                                            "spicetifyAvailable": ["which", "spicetify"],
+                                            "telegramAvailable": ["sh", "-c", "command -v telegram-desktop >/dev/null 2>&1 || command -v Telegram >/dev/null 2>&1 || (command -v flatpak >/dev/null 2>&1 && flatpak list --app | grep -q 'org.telegram.desktop')"],
+                                            "cavaAvailable": ["which", "cava"],
+                                            "emacsAvailable": ["sh", "-c", "test -d \"$HOME/.config/doom\" || test -d \"$HOME/.emacs.d\""],
+                                            "niriAvailable": ["which", "niri"]
                                           })
 
   // Internal tracking
@@ -130,21 +205,22 @@ Singleton {
 
     onExited: function (exitCode) {
       // Set the availability property
-      root[currentProperty] = (exitCode === 0)
+      root[currentProperty] = (exitCode === 0);
 
       // Stop the process to free resources
-      running = false
+      running = false;
 
       // Track completion
-      root.completedChecks++
+      root.completedChecks++;
 
       // Check next program or emit completion signal
       if (root.completedChecks >= root.totalChecks) {
-        // Run Discord client detection after all checks are complete
-        root.detectDiscordClient()
-        root.checksCompleted()
+        // Run Discord and Code client detection after all checks are complete
+        root.detectDiscordClient();
+        root.detectCodeClient();
+        root.checksCompleted();
       } else {
-        root.checkNextProgram()
+        root.checkNextProgram();
       }
     }
 
@@ -159,60 +235,59 @@ Singleton {
   // Function to check the next program in the queue
   function checkNextProgram() {
     if (currentCheckIndex >= checkQueue.length)
-      return
+      return;
+    var propertyName = checkQueue[currentCheckIndex];
+    var command = programsToCheck[propertyName];
 
-    var propertyName = checkQueue[currentCheckIndex]
-    var command = programsToCheck[propertyName]
+    checker.currentProperty = propertyName;
+    checker.command = command;
+    checker.running = true;
 
-    checker.currentProperty = propertyName
-    checker.command = command
-    checker.running = true
-
-    currentCheckIndex++
+    currentCheckIndex++;
   }
 
   // Function to run all program checks
   function checkAllPrograms() {
     // Reset state
-    completedChecks = 0
-    currentCheckIndex = 0
-    checkQueue = Object.keys(programsToCheck)
+    completedChecks = 0;
+    currentCheckIndex = 0;
+    checkQueue = Object.keys(programsToCheck);
 
     // Start first check
     if (checkQueue.length > 0) {
-      checkNextProgram()
+      checkNextProgram();
     }
   }
 
   // Function to check a specific program
   function checkProgram(programProperty) {
     if (!programsToCheck.hasOwnProperty(programProperty)) {
-      Logger.w("ProgramChecker", "Unknown program property:", programProperty)
-      return
+      Logger.w("ProgramChecker", "Unknown program property:", programProperty);
+      return;
     }
 
-    checker.currentProperty = programProperty
-    checker.command = programsToCheck[programProperty]
-    checker.running = true
+    checker.currentProperty = programProperty;
+    checker.command = programsToCheck[programProperty];
+    checker.running = true;
   }
 
   // Manual function to test Discord detection (for debugging)
   function testDiscordDetection() {
-    Logger.d("ProgramChecker", "Testing Discord detection...")
-    Logger.d("ProgramChecker", "HOME:", Quickshell.env("HOME"))
+    Logger.d("ProgramChecker", "Testing Discord detection...");
+    Logger.d("ProgramChecker", "HOME:", Quickshell.env("HOME"));
 
     // Test each client directory
     for (var i = 0; i < TemplateRegistry.discordClients.length; i++) {
-      var client = TemplateRegistry.discordClients[i]
-      var configDir = client.configPath.replace("~", Quickshell.env("HOME"))
-      Logger.d("ProgramChecker", "Checking:", configDir)
+      var client = TemplateRegistry.discordClients[i];
+      var configDir = client.configPath.replace("~", Quickshell.env("HOME"));
+      Logger.d("ProgramChecker", "Checking:", configDir);
     }
 
-    detectDiscordClient()
+    detectDiscordClient();
   }
 
   // Initialize checks when service is created
   Component.onCompleted: {
-    checkAllPrograms()
+    checkAllPrograms();
   }
 }

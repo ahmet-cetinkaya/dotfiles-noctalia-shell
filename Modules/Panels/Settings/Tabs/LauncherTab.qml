@@ -18,66 +18,58 @@ ColumnLayout {
     label: I18n.tr("settings.launcher.settings.position.label")
     description: I18n.tr("settings.launcher.settings.position.description")
     Layout.fillWidth: true
-    model: [{
+    model: [
+      {
         "key": "follow_bar",
         "name": I18n.tr("options.launcher.position.follow_bar")
-      }, {
+      },
+      {
         "key": "center",
         "name": I18n.tr("options.launcher.position.center")
-      }, {
+      },
+      {
         "key": "top_center",
         "name": I18n.tr("options.launcher.position.top_center")
-      }, {
+      },
+      {
         "key": "top_left",
         "name": I18n.tr("options.launcher.position.top_left")
-      }, {
+      },
+      {
         "key": "top_right",
         "name": I18n.tr("options.launcher.position.top_right")
-      }, {
+      },
+      {
         "key": "bottom_left",
         "name": I18n.tr("options.launcher.position.bottom_left")
-      }, {
+      },
+      {
         "key": "bottom_right",
         "name": I18n.tr("options.launcher.position.bottom_right")
-      }, {
+      },
+      {
         "key": "bottom_center",
         "name": I18n.tr("options.launcher.position.bottom_center")
-      }]
+      }
+    ]
     currentKey: Settings.data.appLauncher.position
     onSelected: function (key) {
-      Settings.data.appLauncher.position = key
+      Settings.data.appLauncher.position = key;
     }
   }
 
-  ColumnLayout {
-    spacing: Style.marginXXS
-    Layout.fillWidth: true
+  NToggle {
+    label: I18n.tr("settings.launcher.settings.grid-view.label")
+    description: I18n.tr("settings.launcher.settings.grid-view.description")
+    checked: Settings.data.appLauncher.viewMode === "grid"
+    onToggled: checked => Settings.data.appLauncher.viewMode = checked ? "grid" : "list"
+  }
 
-    NText {
-      text: I18n.tr("settings.launcher.settings.background-opacity.label")
-      pointSize: Style.fontSizeL
-      font.weight: Style.fontWeightBold
-      color: Color.mOnSurface
-    }
-
-    NText {
-      text: I18n.tr("settings.launcher.settings.background-opacity.description")
-      pointSize: Style.fontSizeXS
-      color: Color.mOnSurfaceVariant
-      wrapMode: Text.WordWrap
-      Layout.fillWidth: true
-    }
-
-    NValueSlider {
-      id: launcherBgOpacity
-      Layout.fillWidth: true
-      from: 0.0
-      to: 1.0
-      stepSize: 0.01
-      value: Settings.data.appLauncher.backgroundOpacity
-      onMoved: value => Settings.data.appLauncher.backgroundOpacity = value
-      text: Math.floor(Settings.data.appLauncher.backgroundOpacity * 100) + "%"
-    }
+  NToggle {
+    label: I18n.tr("settings.launcher.settings.show-categories.label")
+    description: I18n.tr("settings.launcher.settings.show-categories.description")
+    checked: Settings.data.appLauncher.showCategories
+    onToggled: checked => Settings.data.appLauncher.showCategories = checked
   }
 
   NToggle {
@@ -85,6 +77,13 @@ ColumnLayout {
     description: I18n.tr("settings.launcher.settings.clipboard-history.description")
     checked: Settings.data.appLauncher.enableClipboardHistory
     onToggled: checked => Settings.data.appLauncher.enableClipboardHistory = checked
+  }
+
+  NToggle {
+    label: I18n.tr("settings.launcher.settings.clip-preview.label")
+    description: I18n.tr("settings.launcher.settings.clip-preview.description")
+    checked: Settings.data.appLauncher.enableClipPreview
+    onToggled: checked => Settings.data.appLauncher.enableClipPreview = checked
   }
 
   NToggle {
@@ -102,9 +101,9 @@ ColumnLayout {
     opacity: ProgramCheckerService.app2unitAvailable ? 1.0 : 0.6
     onToggled: checked => {
                  if (ProgramCheckerService.app2unitAvailable) {
-                   Settings.data.appLauncher.useApp2Unit = checked
+                   Settings.data.appLauncher.useApp2Unit = checked;
                    if (checked) {
-                     Settings.data.appLauncher.customLaunchPrefixEnabled = false
+                     Settings.data.appLauncher.customLaunchPrefixEnabled = false;
                    }
                  }
                }
@@ -116,7 +115,7 @@ ColumnLayout {
     Layout.fillWidth: true
     text: Settings.data.appLauncher.terminalCommand
     onEditingFinished: {
-      Settings.data.appLauncher.terminalCommand = text
+      Settings.data.appLauncher.terminalCommand = text;
     }
   }
 
@@ -126,9 +125,9 @@ ColumnLayout {
     checked: Settings.data.appLauncher.customLaunchPrefixEnabled
     enabled: !Settings.data.appLauncher.useApp2Unit
     onToggled: checked => {
-                 Settings.data.appLauncher.customLaunchPrefixEnabled = checked
+                 Settings.data.appLauncher.customLaunchPrefixEnabled = checked;
                  if (checked) {
-                   Settings.data.appLauncher.useApp2Unit = false
+                   Settings.data.appLauncher.useApp2Unit = false;
                  }
                }
   }
@@ -141,7 +140,7 @@ ColumnLayout {
     enabled: Settings.data.appLauncher.customLaunchPrefixEnabled
     visible: Settings.data.appLauncher.customLaunchPrefixEnabled
     onEditingFinished: {
-      Settings.data.appLauncher.customLaunchPrefix = text
+      Settings.data.appLauncher.customLaunchPrefix = text;
     }
   }
 

@@ -20,9 +20,10 @@ Rectangle {
   // Sizing
   Layout.fillWidth: true
   Layout.fillHeight: true
+  Layout.minimumWidth: 140
 
   // Styling
-  radius: Style.radiusXS
+  radius: Style.iRadiusM
   color: root.checked ? Color.mPrimary : (root.isHovered ? Color.mHover : Color.mSurface)
 
   Behavior on color {
@@ -34,7 +35,13 @@ Rectangle {
 
   NText {
     id: tabText
-    anchors.centerIn: parent
+    anchors {
+      left: parent.left
+      right: parent.right
+      verticalCenter: parent.verticalCenter
+      leftMargin: Style.marginS
+      rightMargin: Style.marginS
+    }
     text: root.text
     pointSize: Style.fontSizeM
     font.weight: root.checked ? Style.fontWeightSemiBold : Style.fontWeightRegular
@@ -57,10 +64,10 @@ Rectangle {
     onEntered: root.isHovered = true
     onExited: root.isHovered = false
     onClicked: {
-      root.clicked()
+      root.clicked();
       // Update parent NTabBar's currentIndex
       if (root.parent && root.parent.parent && root.parent.parent.currentIndex !== undefined) {
-        root.parent.parent.currentIndex = root.tabIndex
+        root.parent.parent.currentIndex = root.tabIndex;
       }
     }
   }

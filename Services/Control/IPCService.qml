@@ -8,6 +8,8 @@ import qs.Commons
 import qs.Services.Compositor
 import qs.Services.Hardware
 import qs.Services.Media
+import qs.Services.Networking
+import qs.Services.Noctalia
 import qs.Services.Power
 import qs.Services.System
 import qs.Services.Theming
@@ -19,7 +21,7 @@ Item {
   IpcHandler {
     target: "bar"
     function toggle() {
-      BarService.isVisible = !BarService.isVisible
+      BarService.isVisible = !BarService.isVisible;
     }
   }
 
@@ -27,7 +29,7 @@ Item {
     target: "screenRecorder"
     function toggle() {
       if (ScreenRecorderService.isAvailable) {
-        ScreenRecorderService.toggleRecording()
+        ScreenRecorderService.toggleRecording();
       }
     }
   }
@@ -36,9 +38,9 @@ Item {
     target: "settings"
     function toggle() {
       root.withTargetScreen(screen => {
-                              var settingsPanel = PanelService.getPanel("settingsPanel", screen)
-                              settingsPanel?.toggle()
-                            })
+                              var settingsPanel = PanelService.getPanel("settingsPanel", screen);
+                              settingsPanel?.toggle();
+                            });
     }
   }
 
@@ -46,9 +48,9 @@ Item {
     target: "calendar"
     function toggle() {
       root.withTargetScreen(screen => {
-                              var calendarPanel = PanelService.getPanel("calendarPanel", screen)
-                              calendarPanel?.toggle(null, "Clock")
-                            })
+                              var clockPanel = PanelService.getPanel("clockPanel", screen);
+                              clockPanel?.toggle(null, "Clock");
+                            });
     }
   }
 
@@ -57,36 +59,40 @@ Item {
     function toggleHistory() {
       // Will attempt to open the panel next to the bar button if any.
       root.withTargetScreen(screen => {
-                              var notificationHistoryPanel = PanelService.getPanel("notificationHistoryPanel", screen)
-                              notificationHistoryPanel.toggle(null, "NotificationHistory")
-                            })
+                              var notificationHistoryPanel = PanelService.getPanel("notificationHistoryPanel", screen);
+                              notificationHistoryPanel.toggle(null, "NotificationHistory");
+                            });
     }
     function toggleDND() {
-      NotificationService.doNotDisturb = !NotificationService.doNotDisturb
+      NotificationService.doNotDisturb = !NotificationService.doNotDisturb;
     }
     function enableDND() {
-      NotificationService.doNotDisturb = true
+      NotificationService.doNotDisturb = true;
     }
     function disableDND() {
-      NotificationService.doNotDisturb = false
+      NotificationService.doNotDisturb = false;
     }
     function clear() {
-      NotificationService.clearHistory()
+      NotificationService.clearHistory();
     }
 
     function dismissOldest() {
-      NotificationService.dismissOldestActive()
+      NotificationService.dismissOldestActive();
+    }
+
+    function removeOldestHistory() {
+      NotificationService.removeOldestHistory();
     }
 
     function dismissAll() {
-      NotificationService.dismissAllActive()
+      NotificationService.dismissAllActive();
     }
   }
 
   IpcHandler {
     target: "idleInhibitor"
     function toggle() {
-      return IdleInhibitorService.manualToggle()
+      return IdleInhibitorService.manualToggle();
     }
   }
 
@@ -94,23 +100,38 @@ Item {
     target: "launcher"
     function toggle() {
       root.withTargetScreen(screen => {
-                              var launcherPanel = PanelService.getPanel("launcherPanel", screen)
-                              launcherPanel?.toggle()
-                            })
+                              var launcherPanel = PanelService.getPanel("launcherPanel", screen);
+                              if (!launcherPanel?.isPanelOpen || (launcherPanel?.isPanelOpen && !launcherPanel?.activePlugin))
+                              launcherPanel?.toggle();
+                              launcherPanel?.setSearchText("");
+                            });
     }
     function clipboard() {
       root.withTargetScreen(screen => {
-                              var launcherPanel = PanelService.getPanel("launcherPanel", screen)
-                              launcherPanel?.setSearchText(">clip ")
-                              launcherPanel?.toggle()
-                            })
+                              var launcherPanel = PanelService.getPanel("launcherPanel", screen);
+                              if (!launcherPanel?.isPanelOpen) {
+                                launcherPanel?.toggle();
+                              }
+                              launcherPanel?.setSearchText(">clip ");
+                            });
     }
     function calculator() {
       root.withTargetScreen(screen => {
-                              var launcherPanel = PanelService.getPanel("launcherPanel", screen)
-                              launcherPanel?.setSearchText(">calc ")
-                              launcherPanel?.toggle()
-                            })
+                              var launcherPanel = PanelService.getPanel("launcherPanel", screen);
+                              if (!launcherPanel?.isPanelOpen) {
+                                launcherPanel?.toggle();
+                              }
+                              launcherPanel?.setSearchText(">calc ");
+                            });
+    }
+    function emoji() {
+      root.withTargetScreen(screen => {
+                              var launcherPanel = PanelService.getPanel("launcherPanel", screen);
+                              if (!launcherPanel?.isPanelOpen) {
+                                launcherPanel?.toggle();
+                              }
+                              launcherPanel?.setSearchText(">emoji ");
+                            });
     }
   }
 
@@ -120,24 +141,8 @@ Item {
     // New preferred method - lock the screen
     function lock() {
       // Only lock if not already locked (prevents the red screen issue)
-      // Note: No unlock via IPC for security reasons
-      if (!lockScreen.active) {
-        lockScreen.triggeredViaDeprecatedCall = false
-        lockScreen.active = true
-      }
-    }
-
-    // Deprecated: Use 'lockScreen lock' instead
-    function toggle() {
-      // Mark as triggered via deprecated call - warning will show in lock screen
-      lockScreen.triggeredViaDeprecatedCall = true
-
-      // Log deprecation warning for users checking logs
-      Logger.w("IPC", "The 'lockScreen toggle' IPC call is deprecated. Use 'lockScreen lock' instead.")
-
-      // Still functional for backward compatibility
-      if (!lockScreen.active) {
-        lockScreen.active = true
+      if (!PanelService.lockScreen.active) {
+        PanelService.lockScreen.active = true;
       }
     }
   }
@@ -145,52 +150,52 @@ Item {
   IpcHandler {
     target: "brightness"
     function increase() {
-      BrightnessService.increaseBrightness()
+      BrightnessService.increaseBrightness();
     }
     function decrease() {
-      BrightnessService.decreaseBrightness()
+      BrightnessService.decreaseBrightness();
     }
   }
 
   IpcHandler {
     target: "darkMode"
     function toggle() {
-      Settings.data.colorSchemes.darkMode = !Settings.data.colorSchemes.darkMode
+      Settings.data.colorSchemes.darkMode = !Settings.data.colorSchemes.darkMode;
     }
     function setDark() {
-      Settings.data.colorSchemes.darkMode = true
+      Settings.data.colorSchemes.darkMode = true;
     }
     function setLight() {
-      Settings.data.colorSchemes.darkMode = false
+      Settings.data.colorSchemes.darkMode = false;
     }
   }
 
   IpcHandler {
     target: "colorScheme"
     function set(schemeName: string) {
-      ColorSchemeService.setPredefinedScheme(schemeName)
+      ColorSchemeService.setPredefinedScheme(schemeName);
     }
   }
 
   IpcHandler {
     target: "volume"
     function increase() {
-      AudioService.increaseVolume()
+      AudioService.increaseVolume();
     }
     function decrease() {
-      AudioService.decreaseVolume()
+      AudioService.decreaseVolume();
     }
     function muteOutput() {
-      AudioService.setOutputMuted(!AudioService.muted)
+      AudioService.setOutputMuted(!AudioService.muted);
     }
     function increaseInput() {
-      AudioService.increaseInputVolume()
+      AudioService.increaseInputVolume();
     }
     function decreaseInput() {
-      AudioService.decreaseInputVolume()
+      AudioService.decreaseInputVolume();
     }
     function muteInput() {
-      AudioService.setInputMuted(!AudioService.inputMuted)
+      AudioService.setInputMuted(!AudioService.inputMuted);
     }
   }
 
@@ -198,13 +203,13 @@ Item {
     target: "sessionMenu"
     function toggle() {
       root.withTargetScreen(screen => {
-                              var sessionMenuPanel = PanelService.getPanel("sessionMenuPanel", screen)
-                              sessionMenuPanel?.toggle()
-                            })
+                              var sessionMenuPanel = PanelService.getPanel("sessionMenuPanel", screen);
+                              sessionMenuPanel?.toggle();
+                            });
     }
 
     function lockAndSuspend() {
-      CompositorService.lockAndSuspend()
+      CompositorService.lockAndSuspend();
     }
   }
 
@@ -212,14 +217,21 @@ Item {
     target: "controlCenter"
     function toggle() {
       root.withTargetScreen(screen => {
-                              var controlCenterPanel = PanelService.getPanel("controlCenterPanel", screen)
+                              var controlCenterPanel = PanelService.getPanel("controlCenterPanel", screen);
                               if (Settings.data.controlCenter.position === "close_to_bar_button") {
                                 // Will attempt to open the panel next to the bar button if any.
-                                controlCenterPanel?.toggle(null, "ControlCenter")
+                                controlCenterPanel?.toggle(null, "ControlCenter");
                               } else {
-                                controlCenterPanel?.toggle()
+                                controlCenterPanel?.toggle();
                               }
-                            })
+                            });
+    }
+  }
+
+  IpcHandler {
+    target: "dock"
+    function toggle() {
+      Settings.data.dock.enabled = !Settings.data.dock.enabled;
     }
   }
 
@@ -229,33 +241,33 @@ Item {
     function toggle() {
       if (Settings.data.wallpaper.enabled) {
         root.withTargetScreen(screen => {
-                                var wallpaperPanel = PanelService.getPanel("wallpaperPanel", screen)
-                                wallpaperPanel?.toggle()
-                              })
+                                var wallpaperPanel = PanelService.getPanel("wallpaperPanel", screen);
+                                wallpaperPanel?.toggle();
+                              });
       }
     }
 
     function random() {
       if (Settings.data.wallpaper.enabled) {
-        WallpaperService.setRandomWallpaper()
+        WallpaperService.setRandomWallpaper();
       }
     }
 
     function set(path: string, screen: string) {
       if (screen === "all" || screen === "") {
-        screen = undefined
+        screen = undefined;
       }
-      WallpaperService.changeWallpaper(path, screen)
+      WallpaperService.changeWallpaper(path, screen);
     }
 
     function toggleAutomation() {
-      Settings.data.wallpaper.randomEnabled = !Settings.data.wallpaper.randomEnabled
+      Settings.data.wallpaper.randomEnabled = !Settings.data.wallpaper.randomEnabled;
     }
     function disableAutomation() {
-      Settings.data.wallpaper.randomEnabled = false
+      Settings.data.wallpaper.randomEnabled = false;
     }
     function enableAutomation() {
-      Settings.data.wallpaper.randomEnabled = true
+      Settings.data.wallpaper.randomEnabled = true;
     }
   }
 
@@ -263,124 +275,192 @@ Item {
     target: "batteryManager"
 
     function cycle() {
-      BatteryService.cycleModes()
+      BatteryService.cycleModes();
     }
 
     function set(mode: string) {
       switch (mode) {
       case "full":
-        BatteryService.setChargingMode(BatteryService.ChargingMode.Full)
-        break
+        BatteryService.setChargingMode(BatteryService.ChargingMode.Full);
+        break;
       case "balanced":
-        BatteryService.setChargingMode(BatteryService.ChargingMode.Balanced)
-        break
+        BatteryService.setChargingMode(BatteryService.ChargingMode.Balanced);
+        break;
       case "lifespan":
-        BatteryService.setChargingMode(BatteryService.ChargingMode.Lifespan)
-        break
+        BatteryService.setChargingMode(BatteryService.ChargingMode.Lifespan);
+        break;
       }
+    }
+  }
+
+  IpcHandler {
+    target: "wifi"
+    function toggle() {
+      NetworkService.setWifiEnabled(!Settings.data.network.wifiEnabled);
+    }
+    function enable() {
+      NetworkService.setWifiEnabled(true);
+    }
+    function disable() {
+      NetworkService.setWifiEnabled(false);
+    }
+    function togglePanel() {
+      root.withTargetScreen(screen => {
+                              var wifiPanel = PanelService.getPanel("wifiPanel", screen);
+                              wifiPanel?.toggle(null, "WiFi");
+                            });
+    }
+  }
+
+  IpcHandler {
+    target: "bluetooth"
+    function toggle() {
+      BluetoothService.setBluetoothEnabled(!BluetoothService.enabled);
+    }
+    function enable() {
+      BluetoothService.setBluetoothEnabled(true);
+    }
+    function disable() {
+      BluetoothService.setBluetoothEnabled(false);
+    }
+    function togglePanel() {
+      root.withTargetScreen(screen => {
+                              var bluetoothPanel = PanelService.getPanel("bluetoothPanel", screen);
+                              bluetoothPanel?.toggle(null, "Bluetooth");
+                            });
+    }
+  }
+
+  IpcHandler {
+    target: "battery"
+    function togglePanel() {
+      root.withTargetScreen(screen => {
+                              var batteryPanel = PanelService.getPanel("batteryPanel", screen);
+                              batteryPanel?.toggle(null, "Battery");
+                            });
     }
   }
 
   IpcHandler {
     target: "powerProfile"
     function cycle() {
-      PowerProfileService.cycleProfile()
+      PowerProfileService.cycleProfile();
     }
 
     function set(mode: string) {
       switch (mode) {
       case "performance":
-        PowerProfileService.setProfile(2)
-        break
+        PowerProfileService.setProfile(2);
+        break;
       case "balanced":
-        PowerProfileService.setProfile(1)
-        break
+        PowerProfileService.setProfile(1);
+        break;
       case "powersaver":
-        PowerProfileService.setProfile(0)
-        break
+        PowerProfileService.setProfile(0);
+        break;
       }
     }
 
     function toggleNoctaliaPerformance() {
-      PowerProfileService.toggleNoctaliaPerformance()
+      PowerProfileService.toggleNoctaliaPerformance();
     }
 
     function enableNoctaliaPerformance() {
-      PowerProfileService.setNoctaliaPerformance(true)
+      PowerProfileService.setNoctaliaPerformance(true);
     }
 
     function disableNoctaliaPerformance() {
-      PowerProfileService.setNoctaliaPerformance(false)
+      PowerProfileService.setNoctaliaPerformance(false);
     }
   }
 
   IpcHandler {
     target: "media"
     function playPause() {
-      MediaService.playPause()
+      MediaService.playPause();
     }
 
     function play() {
-      MediaService.play()
+      MediaService.play();
     }
 
     function stop() {
-      MediaService.stop()
+      MediaService.stop();
     }
 
     function pause() {
-      MediaService.pause()
+      MediaService.pause();
     }
 
     function next() {
-      MediaService.next()
+      MediaService.next();
     }
 
     function previous() {
-      MediaService.previous()
+      MediaService.previous();
     }
 
     function seekRelative(offset: string) {
-      var offsetVal = parseFloat(position)
+      var offsetVal = parseFloat(offset);
       if (Number.isNaN(offsetVal)) {
-        Logger.w("Media", "Argument to ipc call 'media seekRelative' must be a number")
-        return
+        Logger.w("Media", "Argument to ipc call 'media seekRelative' must be a number");
+        return;
       }
-      MediaService.seekRelative(offsetVal)
+      MediaService.seekRelative(offsetVal);
     }
 
     function seekByRatio(position: string) {
-      var positionVal = parseFloat(position)
+      var positionVal = parseFloat(position);
       if (Number.isNaN(positionVal)) {
-        Logger.w("Media", "Argument to ipc call 'media seekByRatio' must be a number")
-        return
+        Logger.w("Media", "Argument to ipc call 'media seekByRatio' must be a number");
+        return;
       }
-      MediaService.seekByRatio(positionVal)
+      MediaService.seekByRatio(positionVal);
     }
   }
 
+  IpcHandler {
+    target: "state"
+
+    // Returns all settings and shell state as JSON
+    function all(): string {
+      try {
+        var snapshot = ShellState.buildStateSnapshot();
+        if (!snapshot) {
+          throw new Error("State snapshot unavailable");
+        }
+        return JSON.stringify(snapshot, null, 2);
+      } catch (error) {
+        Logger.e("IPC", "Failed to serialize state:", error);
+        return JSON.stringify({
+                                "error": "Failed to serialize state: " + error
+                              }, null, 2);
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------
   // Queue an IPC panel operation - will execute when screen is detected
+  // -------------------------------------------------------------------
   function withTargetScreen(callback) {
     if (pendingCallback) {
-      Logger.w("IPC", "Another IPC call is pending, ignoring new call")
-      return
+      Logger.w("IPC", "Another IPC call is pending, ignoring new call");
+      return;
     }
 
     // Single monitor setup can execute immediately
     if (Quickshell.screens.length === 1) {
-      callback(Quickshell.screens[0])
+      callback(Quickshell.screens[0]);
     } else {
       // Multi-monitors setup needs to start async detection
-      detectedScreen = null
-      pendingCallback = callback
-      screenDetectorLoader.active = true
+      detectedScreen = null;
+      pendingCallback = callback;
+      screenDetectorLoader.active = true;
     }
   }
-
-
   /**
-   * For IPC calls on multi-monitors setup that will open panels on screen,
-   * we need to open a QS PanelWindow and wait for it's "screen" property to stabilize.
+  * For IPC calls on multi-monitors setup that will open panels on screen,
+  * we need to open a QS PanelWindow and wait for it's "screen" property to stabilize.
   */
   property ShellScreen detectedScreen: null
   property var pendingCallback: null
@@ -390,17 +470,27 @@ Item {
     running: false
     interval: 20
     onTriggered: {
-      Logger.d("IPC", "Screen debounced to:", detectedScreen?.name || "null")
+      Logger.d("IPC", "Screen debounced to:", detectedScreen?.name || "null");
 
       // Execute pending callback if any
       if (pendingCallback) {
-        Logger.d("IPC", "Executing pending IPC callback on screen:", detectedScreen.name)
-        pendingCallback(detectedScreen)
-        pendingCallback = null
+        if (!Settings.data.general.allowPanelsOnScreenWithoutBar) {
+          // If we explicitely disabled panels on screen without bar, check if bar is configured
+          // for this screen, and fallback to primary screen if necessary
+          var monitors = Settings.data.bar.monitors || [];
+          const hasBar = monitors.length === 0 || monitors.includes(detectedScreen?.name);
+          if (!hasBar) {
+            detectedScreen = Quickshell.screens[0];
+          }
+        }
+
+        Logger.d("IPC", "Executing pending IPC callback on screen:", detectedScreen.name);
+        pendingCallback(detectedScreen);
+        pendingCallback = null;
       }
 
       // Clean up
-      screenDetectorLoader.active = false
+      screenDetectorLoader.active = false;
     }
   }
 
@@ -414,12 +504,15 @@ Item {
       implicitHeight: 0
       color: Color.transparent
       WlrLayershell.exclusionMode: ExclusionMode.Ignore
+      WlrLayershell.namespace: "noctalia-ipc-screen-detector"
       mask: Region {}
 
       onScreenChanged: {
-        detectedScreen = screen
-        screenDetectorDebounce.restart()
+        detectedScreen = screen;
+        screenDetectorDebounce.restart();
       }
     }
   }
+  // -------------------------------------------------------------------
+  // -------------------------------------------------------------------
 }

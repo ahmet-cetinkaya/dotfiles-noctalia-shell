@@ -14,7 +14,7 @@ Rectangle {
   implicitWidth: 150
   implicitHeight: Math.round(Style.baseWidgetSize * 1.1)
 
-  radius: Style.radiusM
+  radius: Style.iRadiusM
   color: Color.mSurface
   border.color: Color.mOutline
   border.width: Style.borderS
@@ -27,14 +27,14 @@ Rectangle {
       var dialog = Qt.createComponent("NColorPickerDialog.qml").createObject(root, {
                                                                                "selectedColor": selectedColor,
                                                                                "parent": Overlay.overlay
-                                                                             })
+                                                                             });
       // Connect the dialog's signal to the picker's signal
       dialog.colorSelected.connect(function (color) {
-        root.selectedColor = color
-        root.colorSelected(color)
-      })
+        root.selectedColor = color;
+        root.colorSelected(color);
+      });
 
-      dialog.open()
+      dialog.open();
     }
 
     RowLayout {
@@ -49,7 +49,7 @@ Rectangle {
       Rectangle {
         Layout.preferredWidth: root.height * 0.6
         Layout.preferredHeight: root.height * 0.6
-        radius: Layout.preferredWidth * 0.5
+        radius: Math.min(Style.iRadiusL, Layout.preferredWidth / 2)
         color: root.selectedColor
         border.color: Color.mOutline
         border.width: Style.borderS

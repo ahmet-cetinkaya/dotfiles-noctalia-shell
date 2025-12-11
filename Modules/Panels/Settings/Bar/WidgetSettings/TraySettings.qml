@@ -13,7 +13,8 @@ ColumnLayout {
   // Local state
   property var localBlacklist: widgetData.blacklist || []
   property bool valueColorizeIcons: widgetData.colorizeIcons !== undefined ? widgetData.colorizeIcons : widgetMetadata.colorizeIcons
-  property bool valueDrawerEnabled: widgetData.drawerEnabled !== undefined ? widgetData.drawerEnabled : (widgetMetadata.drawerEnabled !== undefined ? widgetMetadata.drawerEnabled : true)
+  property bool valueDrawerEnabled: widgetData.drawerEnabled !== undefined ? widgetData.drawerEnabled : widgetMetadata.drawerEnabled
+  property bool valueHidePassive: widgetData.hidePassive !== undefined ? widgetData.hidePassive : widgetMetadata.hidePassive
 
   ListModel {
     id: blacklistModel
@@ -24,7 +25,7 @@ ColumnLayout {
     for (var i = 0; i < localBlacklist.length; i++) {
       blacklistModel.append({
                               "rule": localBlacklist[i]
-                            })
+                            });
     }
   }
 
@@ -44,6 +45,14 @@ ColumnLayout {
     description: I18n.tr("bar.widget-settings.tray.drawer-enabled.description")
     checked: root.valueDrawerEnabled
     onToggled: checked => root.valueDrawerEnabled = checked
+  }
+
+  NToggle {
+    Layout.fillWidth: true
+    label: I18n.tr("bar.widget-settings.tray.hide-passive.label")
+    description: I18n.tr("bar.widget-settings.tray.hide-passive.description")
+    checked: root.valueHidePassive
+    onToggled: checked => root.valueHidePassive = checked
   }
 
   ColumnLayout {
@@ -66,19 +75,19 @@ ColumnLayout {
         buttonIcon: "add"
         onButtonClicked: {
           if (newRuleInput.text.length > 0) {
-            var newRule = newRuleInput.text.trim()
-            var exists = false
+            var newRule = newRuleInput.text.trim();
+            var exists = false;
             for (var i = 0; i < blacklistModel.count; i++) {
               if (blacklistModel.get(i).rule === newRule) {
-                exists = true
-                break
+                exists = true;
+                break;
               }
             }
             if (!exists) {
               blacklistModel.append({
                                       "rule": newRule
-                                    })
-              newRuleInput.text = ""
+                                    });
+              newRuleInput.text = "";
             }
           }
         }
@@ -131,7 +140,7 @@ ColumnLayout {
           colorBgHover: Color.mError
           colorFgHover: Color.mOnError
           onClicked: {
-            blacklistModel.remove(index)
+            blacklistModel.remove(index);
           }
         }
       }
@@ -140,16 +149,17 @@ ColumnLayout {
 
   // This function will be called by the dialog to get the new settings
   function saveSettings() {
-    var newBlacklist = []
+    var newBlacklist = [];
     for (var i = 0; i < blacklistModel.count; i++) {
-      newBlacklist.push(blacklistModel.get(i).rule)
+      newBlacklist.push(blacklistModel.get(i).rule);
     }
 
     // Return the updated settings for this widget instance
-    var settings = Object.assign({}, widgetData || {})
-    settings.blacklist = newBlacklist
-    settings.colorizeIcons = root.valueColorizeIcons
-    settings.drawerEnabled = root.valueDrawerEnabled
-    return settings
+    var settings = Object.assign({}, widgetData || {});
+    settings.blacklist = newBlacklist;
+    settings.colorizeIcons = root.valueColorizeIcons;
+    settings.drawerEnabled = root.valueDrawerEnabled;
+    settings.hidePassive = root.valueHidePassive;
+    return settings;
   }
 }

@@ -1,24 +1,28 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 import qs.Commons
-import qs.Services.UI
-import qs.Services.Networking
-import qs.Widgets
 import qs.Modules.MainScreen
+import qs.Services.Networking
+import qs.Services.UI
+import qs.Widgets
 
 SmartPanel {
   id: root
 
-  preferredWidth: Math.round(400 * Style.uiScaleRatio)
+  preferredWidth: Math.round(420 * Style.uiScaleRatio)
   preferredHeight: Math.round(500 * Style.uiScaleRatio)
 
   panelContent: Rectangle {
     color: Color.transparent
 
-    property real contentPreferredHeight: !(BluetoothService.adapter && BluetoothService.adapter.enabled) ? Math.min(preferredHeight, Math.max(280 * Style.uiScaleRatio, mainColumn.implicitHeight + Style.marginL * 2)) : (mainColumn.implicitHeight + Style.marginL * 2)
+    // Calculate content height based on header + devices list (or minimum for empty states)
+    property real headerHeight: headerRow.implicitHeight + Style.marginM * 2
+    property real devicesHeight: devicesList.implicitHeight
+    property real calculatedHeight: (devicesHeight !== 0) ? (headerHeight + devicesHeight + Style.marginL * 2 + Style.marginM) : (280 * Style.uiScaleRatio)
+    property real contentPreferredHeight: (BluetoothService.adapter && BluetoothService.adapter.enabled) ? Math.min(root.preferredHeight, calculatedHeight) : Math.min(root.preferredHeight, 280 * Style.uiScaleRatio)
 
     ColumnLayout {
       id: mainColumn
@@ -65,7 +69,7 @@ SmartPanel {
             baseSize: Style.baseWidgetSize * 0.8
             onClicked: {
               if (BluetoothService.adapter) {
-                BluetoothService.adapter.discovering = !BluetoothService.adapter.discovering
+                BluetoothService.adapter.discovering = !BluetoothService.adapter.discovering;
               }
             }
           }
@@ -75,7 +79,7 @@ SmartPanel {
             tooltipText: I18n.tr("tooltips.close")
             baseSize: Style.baseWidgetSize * 0.8
             onClicked: {
-              root.close()
+              root.close();
             }
           }
         }
@@ -83,6 +87,7 @@ SmartPanel {
 
       // Adapter not available of disabled
       NBox {
+        id: disabledBox
         visible: !(BluetoothService.adapter && BluetoothService.adapter.enabled)
         Layout.fillWidth: true
         Layout.fillHeight: true
@@ -135,6 +140,7 @@ SmartPanel {
         contentWidth: availableWidth
 
         ColumnLayout {
+          id: devicesList
           width: parent.width
           spacing: Style.marginM
 
@@ -143,9 +149,9 @@ SmartPanel {
             label: I18n.tr("bluetooth.panel.connected-devices")
             property var items: {
               if (!BluetoothService.adapter || !Bluetooth.devices)
-                return []
-              var filtered = Bluetooth.devices.values.filter(dev => dev && !dev.blocked && dev.connected)
-              return BluetoothService.sortDevices(filtered)
+                return [];
+              var filtered = Bluetooth.devices.values.filter(dev => dev && !dev.blocked && dev.connected);
+              return BluetoothService.sortDevices(filtered);
             }
             model: items
             visible: items.length > 0
@@ -158,9 +164,9 @@ SmartPanel {
             tooltipText: I18n.tr("tooltips.connect-disconnect-devices")
             property var items: {
               if (!BluetoothService.adapter || !Bluetooth.devices)
-                return []
-              var filtered = Bluetooth.devices.values.filter(dev => dev && !dev.blocked && !dev.connected && (dev.paired || dev.trusted))
-              return BluetoothService.sortDevices(filtered)
+                return [];
+              var filtered = Bluetooth.devices.values.filter(dev => dev && !dev.blocked && !dev.connected && (dev.paired || dev.trusted));
+              return BluetoothService.sortDevices(filtered);
             }
             model: items
             visible: items.length > 0
@@ -172,9 +178,9 @@ SmartPanel {
             label: I18n.tr("bluetooth.panel.available-devices")
             property var items: {
               if (!BluetoothService.adapter || !Bluetooth.devices)
-                return []
-              var filtered = Bluetooth.devices.values.filter(dev => dev && !dev.blocked && !dev.paired && !dev.trusted)
-              return BluetoothService.sortDevices(filtered)
+                return [];
+              var filtered = Bluetooth.devices.values.filter(dev => dev && !dev.blocked && !dev.paired && !dev.trusted);
+              return BluetoothService.sortDevices(filtered);
             }
             model: items
             visible: items.length > 0
@@ -187,13 +193,13 @@ SmartPanel {
             Layout.preferredHeight: columnScanning.implicitHeight + Style.marginM * 2
             visible: {
               if (!BluetoothService.adapter || !BluetoothService.adapter.discovering || !Bluetooth.devices) {
-                return false
+                return false;
               }
 
               var availableCount = Bluetooth.devices.values.filter(dev => {
-                                                                     return dev && !dev.paired && !dev.pairing && !dev.blocked && (dev.signalStrength === undefined || dev.signalStrength > 0)
-                                                                   }).length
-              return (availableCount === 0)
+                                                                     return dev && !dev.paired && !dev.pairing && !dev.blocked && (dev.signalStrength === undefined || dev.signalStrength > 0);
+                                                                   }).length;
+              return (availableCount === 0);
             }
 
             ColumnLayout {
@@ -237,10 +243,6 @@ SmartPanel {
                 wrapMode: Text.WordWrap
               }
             }
-          }
-
-          Item {
-            Layout.fillHeight: true
           }
         }
       }

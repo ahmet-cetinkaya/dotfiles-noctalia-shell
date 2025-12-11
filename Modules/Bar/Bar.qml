@@ -1,15 +1,15 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Layouts
 import Quickshell
-import Quickshell.Wayland
 import Quickshell.Services.UPower
+import Quickshell.Wayland
 import qs.Commons
+import qs.Modules.Bar.Extras
+import qs.Modules.Notification
 import qs.Services.UI
 import qs.Widgets
-import qs.Modules.Notification
-import qs.Modules.Bar.Extras
 
 // Bar Component
 Item {
@@ -28,8 +28,6 @@ Item {
   readonly property string barPosition: Settings.data.bar.position || "top"
   readonly property bool barIsVertical: barPosition === "left" || barPosition === "right"
   readonly property bool barFloating: Settings.data.bar.floating || false
-  readonly property real barMarginH: 0 //barFloating ? Settings.data.bar.marginHorizontal * Style.marginXL : 0
-  readonly property real barMarginV: 0 //barFloating ? Settings.data.bar.marginVertical * Style.marginXL : 0
 
   // Fill the parent (the Loader)
   anchors.fill: parent
@@ -37,10 +35,9 @@ Item {
   // Register bar when screen becomes available
   onScreenChanged: {
     if (screen && screen.name) {
-      Logger.d("Bar", "Bar screen set to:", screen.name)
-      Logger.d("Bar", "  Position:", barPosition, "Floating:", barFloating)
-      Logger.d("Bar", "  Margins - H:", barMarginH, "V:", barMarginV)
-      BarService.registerBar(screen.name)
+      Logger.d("Bar", "Bar screen set to:", screen.name);
+      Logger.d("Bar", "  Position:", barPosition, "Floating:", barFloating);
+      BarService.registerBar(screen.name);
     }
   }
 
@@ -50,46 +47,26 @@ Item {
     anchors.fill: parent
     active: {
       if (root.screen === null || root.screen === undefined) {
-        return false
+        return false;
       }
 
-      var monitors = Settings.data.bar.monitors || []
-      var result = monitors.length === 0 || monitors.includes(root.screen.name)
-      return result
+      var monitors = Settings.data.bar.monitors || [];
+      var result = monitors.length === 0 || monitors.includes(root.screen.name);
+      return result;
     }
 
     sourceComponent: Item {
       anchors.fill: parent
 
-      // Bar container (background rendered by AllBackgrounds)
+      // Bar container - Content
       Item {
         id: bar
 
-        // Position and size the bar based on orientation and floating margins
-        x: {
-          var baseX = (root.barPosition === "right") ? (parent.width - Style.barHeight - root.barMarginH) : root.barMarginH
-          if (root.barPosition === "right")
-            return baseX // Extend left towards panels
-          return baseX
-        }
-        y: {
-          var baseY = (root.barPosition === "bottom") ? (parent.height - Style.barHeight - root.barMarginV) : root.barMarginV
-          if (root.barPosition === "bottom")
-            return baseY // Extend up towards panels
-          return baseY
-        }
-        width: {
-          var baseWidth = root.barIsVertical ? Style.barHeight : (parent.width - root.barMarginH * 2)
-          if (!root.barIsVertical)
-            return baseWidth // Horizontal bars extend via height, not width
-          return baseWidth + 1
-        }
-        height: {
-          var baseHeight = root.barIsVertical ? (parent.height - root.barMarginV * 2) : Style.barHeight
-          if (!root.barIsVertical)
-            return baseHeight
-          return baseHeight // Vertical bars extend via width, not height
-        }
+        // Position and size the bar content based on orientation
+        x: (root.barPosition === "right") ? (parent.width - Style.barHeight) : 0
+        y: (root.barPosition === "bottom") ? (parent.height - Style.barHeight) : 0
+        width: root.barIsVertical ? Style.barHeight : parent.width
+        height: root.barIsVertical ? parent.height : Style.barHeight
 
         // Corner states for new unified background system
         // State -1: No radius (flat/square corner)
@@ -99,73 +76,73 @@ Item {
         readonly property int topLeftCornerState: {
           // Floating bar: always simple rounded corners
           if (barFloating)
-            return 0
+            return 0;
           // Top bar: top corners against screen edge = no radius
           if (barPosition === "top")
-            return -1
+            return -1;
           // Left bar: top-left against screen edge = no radius
           if (barPosition === "left")
-            return -1
+            return -1;
           // Bottom/Right bar with outerCorners: inverted corner
           if (Settings.data.bar.outerCorners && (barPosition === "bottom" || barPosition === "right")) {
-            return barIsVertical ? 1 : 2 // horizontal invert for vertical bars, vertical invert for horizontal
+            return barIsVertical ? 1 : 2; // horizontal invert for vertical bars, vertical invert for horizontal
           }
           // No outerCorners = square
-          return -1
+          return -1;
         }
 
         readonly property int topRightCornerState: {
           // Floating bar: always simple rounded corners
           if (barFloating)
-            return 0
+            return 0;
           // Top bar: top corners against screen edge = no radius
           if (barPosition === "top")
-            return -1
+            return -1;
           // Right bar: top-right against screen edge = no radius
           if (barPosition === "right")
-            return -1
+            return -1;
           // Bottom/Left bar with outerCorners: inverted corner
           if (Settings.data.bar.outerCorners && (barPosition === "bottom" || barPosition === "left")) {
-            return barIsVertical ? 1 : 2
+            return barIsVertical ? 1 : 2;
           }
           // No outerCorners = square
-          return -1
+          return -1;
         }
 
         readonly property int bottomLeftCornerState: {
           // Floating bar: always simple rounded corners
           if (barFloating)
-            return 0
+            return 0;
           // Bottom bar: bottom corners against screen edge = no radius
           if (barPosition === "bottom")
-            return -1
+            return -1;
           // Left bar: bottom-left against screen edge = no radius
           if (barPosition === "left")
-            return -1
+            return -1;
           // Top/Right bar with outerCorners: inverted corner
           if (Settings.data.bar.outerCorners && (barPosition === "top" || barPosition === "right")) {
-            return barIsVertical ? 1 : 2
+            return barIsVertical ? 1 : 2;
           }
           // No outerCorners = square
-          return -1
+          return -1;
         }
 
         readonly property int bottomRightCornerState: {
           // Floating bar: always simple rounded corners
           if (barFloating)
-            return 0
+            return 0;
           // Bottom bar: bottom corners against screen edge = no radius
           if (barPosition === "bottom")
-            return -1
+            return -1;
           // Right bar: bottom-right against screen edge = no radius
           if (barPosition === "right")
-            return -1
+            return -1;
           // Top/Left bar with outerCorners: inverted corner
           if (Settings.data.bar.outerCorners && (barPosition === "top" || barPosition === "left")) {
-            return barIsVertical ? 1 : 2
+            return barIsVertical ? 1 : 2;
           }
           // No outerCorners = square
-          return -1
+          return -1;
         }
 
         MouseArea {
@@ -175,14 +152,14 @@ Item {
           preventStealing: true
           onClicked: function (mouse) {
             if (mouse.button === Qt.RightButton) {
-              var controlCenterPanel = PanelService.getPanel("controlCenterPanel", screen)
+              var controlCenterPanel = PanelService.getPanel("controlCenterPanel", screen);
               if (Settings.data.controlCenter.position === "close_to_bar_button") {
                 // Will attempt to open the panel next to the bar button if any.
-                controlCenterPanel?.toggle(null, "ControlCenter")
+                controlCenterPanel?.toggle(null, "ControlCenter");
               } else {
-                controlCenterPanel?.toggle()
+                controlCenterPanel?.toggle();
               }
-              mouse.accepted = true
+              mouse.accepted = true;
             }
           }
         }

@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../Helpers/FuzzySort.js" as Fuzzysort
 import qs.Commons
 import qs.Widgets
-import "../Helpers/FuzzySort.js" as Fuzzysort
 
 RowLayout {
   id: root
@@ -13,9 +13,7 @@ RowLayout {
 
   property string label: ""
   property string description: ""
-  property ListModel model: {
-
-  }
+  property ListModel model: {}
   property string currentKey: ""
   property string placeholder: ""
   property string searchPlaceholder: I18n.tr("placeholders.search")
@@ -35,39 +33,39 @@ RowLayout {
   function findIndexByKey(key) {
     for (var i = 0; i < root.model.count; i++) {
       if (root.model.get(i).key === key) {
-        return i
+        return i;
       }
     }
-    return -1
+    return -1;
   }
 
   function findIndexByKeyInFiltered(key) {
     for (var i = 0; i < root.filteredModel.count; i++) {
       if (root.filteredModel.get(i).key === key) {
-        return i
+        return i;
       }
     }
-    return -1
+    return -1;
   }
 
   function filterModel() {
-    filteredModel.clear()
+    filteredModel.clear();
 
     // Check if model exists and has items
     if (!root.model || root.model.count === undefined || root.model.count === 0) {
-      return
+      return;
     }
 
     if (searchText.trim() === "") {
       // If no search text, show all items
       for (var i = 0; i < root.model.count; i++) {
-        filteredModel.append(root.model.get(i))
+        filteredModel.append(root.model.get(i));
       }
     } else {
       // Convert ListModel to array for fuzzy search
-      var items = []
+      var items = [];
       for (var i = 0; i < root.model.count; i++) {
-        items.push(root.model.get(i))
+        items.push(root.model.get(i));
       }
 
       // Use fuzzy search if available, fallback to simple search
@@ -76,19 +74,19 @@ RowLayout {
                                           "key": "name",
                                           "threshold": -1000,
                                           "limit": 50
-                                        })
+                                        });
 
         // Add results in order of relevance
         for (var j = 0; j < fuzzyResults.length; j++) {
-          filteredModel.append(fuzzyResults[j].obj)
+          filteredModel.append(fuzzyResults[j].obj);
         }
       } else {
         // Fallback to simple search
-        var searchLower = searchText.toLowerCase()
+        var searchLower = searchText.toLowerCase();
         for (var i = 0; i < items.length; i++) {
-          var item = items[i]
+          var item = items[i];
           if (item.name.toLowerCase().includes(searchLower)) {
-            filteredModel.append(item)
+            filteredModel.append(item);
           }
         }
       }
@@ -116,7 +114,7 @@ RowLayout {
     currentIndex: findIndexByKeyInFiltered(currentKey)
     onActivated: {
       if (combo.currentIndex >= 0 && combo.currentIndex < filteredModel.count) {
-        root.selected(filteredModel.get(combo.currentIndex).key)
+        root.selected(filteredModel.get(combo.currentIndex).key);
       }
     }
 
@@ -126,7 +124,7 @@ RowLayout {
       color: Color.mSurface
       border.color: combo.activeFocus ? Color.mSecondary : Color.mOutline
       border.width: Style.borderS
-      radius: Style.radiusM
+      radius: Style.iRadiusM
 
       Behavior on border.color {
         ColorAnimation {
@@ -186,24 +184,28 @@ RowLayout {
             id: defaultDelegate
             ItemDelegate {
               id: delegateRoot
-              width: listView.width
+              width: listView.width - listView.scrollBarTotalWidth
+              leftPadding: Style.marginM
+              rightPadding: Style.marginM
+              topPadding: Style.marginS
+              bottomPadding: Style.marginS
               hoverEnabled: true
               highlighted: ListView.view.currentIndex === index
 
               onHoveredChanged: {
                 if (hovered) {
-                  ListView.view.currentIndex = index
+                  ListView.view.currentIndex = index;
                 }
               }
 
               onClicked: {
-                root.selected(filteredModel.get(index).key)
-                combo.currentIndex = root.findIndexByKeyInFiltered(filteredModel.get(index).key)
-                combo.popup.close()
+                root.selected(filteredModel.get(index).key);
+                combo.currentIndex = root.findIndexByKeyInFiltered(filteredModel.get(index).key);
+                combo.popup.close();
               }
 
               contentItem: RowLayout {
-                width: parent.width
+                width: delegateRoot.width - delegateRoot.leftPadding - delegateRoot.rightPadding
                 spacing: Style.marginM
 
                 NText {
@@ -221,31 +223,58 @@ RowLayout {
                 }
 
                 RowLayout {
-                  spacing: Style.marginS
+                  spacing: Style.marginXXS
                   Layout.alignment: Qt.AlignRight
 
+                  // Generic badge renderer
                   Repeater {
-                    model: typeof badgeLocations !== 'undefined' ? badgeLocations : []
+                    model: {
+                      if (typeof badges === 'undefined' || badges === null)
+                        return 0;
+                      // Handle both arrays and ListModels
+                      if (typeof badges.length !== 'undefined')
+                        return badges.length;
+                      if (typeof badges.count !== 'undefined')
+                        return badges.count;
+                      return 0;
+                    }
 
-                    delegate: Item {
-                      width: Style.baseWidgetSize * 0.7
-                      height: Style.baseWidgetSize * 0.7
-
-                      NText {
-                        anchors.centerIn: parent
-                        text: modelData
-                        pointSize: Style.fontSizeXXS
-                        font.weight: Style.fontWeightBold
-                        color: highlighted ? Color.mOnHover : Color.mOnSurface
+                    delegate: NIcon {
+                      required property int index
+                      readonly property var badgeData: {
+                        if (typeof badges === 'undefined' || badges === null)
+                          return null;
+                        // Handle both arrays and ListModels
+                        if (typeof badges.length !== 'undefined')
+                          return badges[index];
+                        if (typeof badges.get !== 'undefined')
+                          return badges.get(index);
+                        return null;
                       }
+
+                      icon: badgeData && badgeData.icon ? badgeData.icon : ""
+                      pointSize: {
+                        if (!badgeData || !badgeData.size)
+                          return Style.fontSizeXS;
+                        if (badgeData.size === "xsmall")
+                          return Style.fontSizeXXS;
+                        else if (badgeData.size === "medium")
+                          return Style.fontSizeM;
+                        else
+                          return Style.fontSizeXS;
+                      }
+                      color: highlighted ? Color.mOnHover : (badgeData && badgeData.color ? badgeData.color : Color.mOnSurface)
+                      Layout.preferredWidth: Style.baseWidgetSize * 0.6
+                      Layout.preferredHeight: Style.baseWidgetSize * 0.6
+                      visible: badgeData && badgeData.icon !== undefined && badgeData.icon !== ""
                     }
                   }
                 }
               }
               background: Rectangle {
-                width: listView.width
+                anchors.fill: parent
                 color: highlighted ? Color.mHover : Color.transparent
-                radius: Style.radiusS
+                radius: Style.iRadiusS
                 Behavior on color {
                   ColorAnimation {
                     duration: Style.animationFast
@@ -261,7 +290,7 @@ RowLayout {
         color: Color.mSurfaceVariant
         border.color: Color.mOutline
         border.width: Style.borderS
-        radius: Style.radiusM
+        radius: Style.iRadiusM
       }
     }
 
@@ -269,7 +298,7 @@ RowLayout {
     Connections {
       target: root
       function onCurrentKeyChanged() {
-        combo.currentIndex = root.findIndexByKeyInFiltered(currentKey)
+        combo.currentIndex = root.findIndexByKeyInFiltered(currentKey);
       }
     }
 
@@ -279,13 +308,13 @@ RowLayout {
       function onVisibleChanged() {
         if (combo.popup.visible) {
           // Ensure the model is filtered when popup opens
-          filterModel()
+          filterModel();
           // Small delay to ensure the popup is fully rendered
           Qt.callLater(() => {
                          if (searchInput && searchInput.inputItem) {
-                           searchInput.inputItem.forceActiveFocus()
+                           searchInput.inputItem.forceActiveFocus();
                          }
-                       })
+                       });
         }
       }
     }

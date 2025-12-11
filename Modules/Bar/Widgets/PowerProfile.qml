@@ -15,13 +15,14 @@ NIconButton {
   baseSize: Style.capsuleHeight
   applyUiScale: false
   density: Settings.data.bar.density
+  customRadius: Style.radiusL
   visible: PowerProfileService.available
   icon: PowerProfileService.getIcon()
   tooltipText: I18n.tr("tooltips.power-profile", {
                          "profile": PowerProfileService.getName()
                        })
   tooltipDirection: BarService.getTooltipDirection()
-  colorBg: (PowerProfileService.profile === PowerProfile.Balanced) ? (Settings.data.bar.showCapsule ? Color.mSurfaceVariant : Color.transparent) : Color.mPrimary
+  colorBg: (PowerProfileService.profile === PowerProfile.Balanced) ? Style.capsuleColor : Color.mPrimary
   colorFg: (PowerProfileService.profile === PowerProfile.Balanced) ? Color.mOnSurface : Color.mOnPrimary
   colorBorder: Color.transparent
   colorBorderHover: Color.transparent

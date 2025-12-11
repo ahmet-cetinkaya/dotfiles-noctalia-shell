@@ -16,7 +16,7 @@ ColumnLayout {
   NText {
     text: label
     pointSize: Style.fontSizeL
-    font.weight: Style.fontWeightBold
+    font.weight: Style.fontWeightSemiBold
     color: labelColor
     visible: label !== ""
     Layout.fillWidth: true
@@ -29,5 +29,7 @@ ColumnLayout {
     wrapMode: Text.WordWrap
     visible: description !== ""
     Layout.fillWidth: true
+    // allow HTML like <i>...</i> in labels/descriptions
+    textFormat: Text.StyledText
   }
 }

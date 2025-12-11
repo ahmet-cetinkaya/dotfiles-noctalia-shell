@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.Commons
+import qs.Modules.Bar.Extras
 import qs.Services.Compositor
 import qs.Services.UI
 import qs.Widgets
@@ -20,71 +21,108 @@ Item {
   property int sectionWidgetIndex: -1
   property int sectionWidgetsCount: 0
 
-  readonly property bool isVerticalBar: Settings.data.bar.position === "left" || Settings.data.bar.position === "right"
+  readonly property string barPosition: Settings.data.bar.position
+  readonly property bool isVerticalBar: barPosition === "left" || barPosition === "right"
   readonly property string density: Settings.data.bar.density
   readonly property real itemSize: (density === "compact") ? Style.capsuleHeight * 0.9 : Style.capsuleHeight * 0.8
   property var widgetMetadata: BarWidgetRegistry.widgetMetadata[widgetId]
   property var widgetSettings: {
     if (section && sectionWidgetIndex >= 0) {
-      var widgets = Settings.data.bar.widgets[section]
+      var widgets = Settings.data.bar.widgets[section];
       if (widgets && sectionWidgetIndex < widgets.length) {
-        return widgets[sectionWidgetIndex]
+        return widgets[sectionWidgetIndex];
       }
     }
-    return {}
+    return {};
   }
-  readonly property bool hideUnoccupied: (widgetSettings.hideUnoccupied !== undefined) ? widgetSettings.hideUnoccupied : false
-  readonly property bool showWorkspaceNumbers: (widgetSettings.showWorkspaceNumbers !== undefined) ? widgetSettings.showWorkspaceNumbers : true
-  readonly property bool showNumbersOnlyWhenOccupied: (widgetSettings.showNumbersOnlyWhenOccupied !== undefined) ? widgetSettings.showNumbersOnlyWhenOccupied : true
+
+  readonly property int characterCount: 2
+  readonly property bool hideUnoccupied: (widgetSettings.hideUnoccupied !== undefined) ? widgetSettings.hideUnoccupied : widgetMetadata.hideUnoccupied
+  readonly property string labelMode: (widgetSettings.labelMode !== undefined) ? widgetSettings.labelMode : widgetMetadata.labelMode
+  readonly property bool showLabelsOnlyWhenOccupied: (widgetSettings.showLabelsOnlyWhenOccupied !== undefined) ? widgetSettings.showLabelsOnlyWhenOccupied : widgetMetadata.showLabelsOnlyWhenOccupied
+  readonly property bool colorizeIcons: (widgetSettings.colorizeIcons !== undefined) ? widgetSettings.colorizeIcons : widgetMetadata.colorizeIcons
+
   property ListModel localWorkspaces: ListModel {}
   property real masterProgress: 0.0
   property bool effectsActive: false
   property color effectColor: Color.mPrimary
 
-  function refreshWorkspaces() {
-    localWorkspaces.clear()
-    if (!screen)
-      return
+  // Wheel scroll handling
+  property int wheelAccumulatedDelta: 0
+  property bool wheelCooldown: false
 
-    const screenName = screen.name.toLowerCase()
+  // Context menu state
+  property var selectedWindow: null
+  property string selectedAppName: ""
+  property int modelUpdateTrigger: 0  // Dummy property to force model re-evaluation
+
+  function refreshWorkspaces() {
+    localWorkspaces.clear();
+    if (!screen)
+      return;
+    const screenName = screen.name.toLowerCase();
 
     for (var i = 0; i < CompositorService.workspaces.count; i++) {
-      const ws = CompositorService.workspaces.get(i)
+      const ws = CompositorService.workspaces.get(i);
 
       if (ws.output.toLowerCase() !== screenName)
-        continue
+        continue;
       if (hideUnoccupied && !ws.isOccupied && !ws.isFocused)
-        continue
+        continue;
 
       // Copy all properties from ws and add windows
-      var workspaceData = Object.assign({}, ws)
-      workspaceData.windows = CompositorService.getWindowsForWorkspace(ws.id)
+      var workspaceData = Object.assign({}, ws);
+      workspaceData.windows = CompositorService.getWindowsForWorkspace(ws.id);
 
-      localWorkspaces.append(workspaceData)
+      localWorkspaces.append(workspaceData);
     }
-    updateWorkspaceFocus()
+
+    updateWorkspaceFocus();
   }
 
   function triggerUnifiedWave() {
-    effectColor = Color.mPrimary
-    masterAnimation.restart()
+    effectColor = Color.mPrimary;
+    masterAnimation.restart();
   }
 
   function updateWorkspaceFocus() {
     for (var i = 0; i < localWorkspaces.count; i++) {
-      const ws = localWorkspaces.get(i)
+      const ws = localWorkspaces.get(i);
       if (ws.isFocused === true) {
-        root.triggerUnifiedWave()
-        break
+        root.triggerUnifiedWave();
+        break;
       }
     }
   }
 
+  function getFocusedLocalIndex() {
+    for (var i = 0; i < localWorkspaces.count; i++) {
+      if (localWorkspaces.get(i).isFocused === true)
+        return i;
+    }
+    return -1;
+  }
+
+  function switchByOffset(offset) {
+    if (localWorkspaces.count === 0)
+      return;
+    var current = getFocusedLocalIndex();
+    if (current < 0)
+      current = 0;
+    var next = (current + offset) % localWorkspaces.count;
+    if (next < 0)
+      next = localWorkspaces.count - 1;
+    const ws = localWorkspaces.get(next);
+    if (ws && ws.idx !== undefined)
+      CompositorService.switchToWorkspace(ws);
+  }
+
   Component.onCompleted: {
-    refreshWorkspaces()
+    refreshWorkspaces();
   }
 
   onScreenChanged: refreshWorkspaces()
+  onHideUnoccupiedChanged: refreshWorkspaces()
 
   implicitWidth: isVerticalBar ? taskbarGrid.implicitWidth + Style.marginM * 2 : Math.round(taskbarGrid.implicitWidth + Style.marginM * 2)
   implicitHeight: isVerticalBar ? Math.round(taskbarGrid.implicitHeight + Style.marginM * 2) : Style.barHeight
@@ -93,11 +131,11 @@ Item {
     target: CompositorService
 
     function onWorkspacesChanged() {
-      refreshWorkspaces()
+      refreshWorkspaces();
     }
 
     function onWindowListChanged() {
-      refreshWorkspaces()
+      refreshWorkspaces();
     }
   }
 
@@ -128,6 +166,96 @@ Item {
     }
   }
 
+  NPopupContextMenu {
+    id: contextMenu
+
+    model: {
+      // Reference modelUpdateTrigger to make binding reactive
+      const _ = root.modelUpdateTrigger;
+
+      var items = [];
+      if (root.selectedWindow) {
+        items.push({
+                     "label": I18n.tr("context-menu.activate-app", {
+                                        "app": root.selectedAppName
+                                      }),
+                     "action": "activate",
+                     "icon": "focus"
+                   });
+        items.push({
+                     "label": I18n.tr("context-menu.close-app", {
+                                        "app": root.selectedAppName
+                                      }),
+                     "action": "close",
+                     "icon": "x"
+                   });
+      }
+      items.push({
+                   "label": I18n.tr("context-menu.widget-settings"),
+                   "action": "widget-settings",
+                   "icon": "settings"
+                 });
+      return items;
+    }
+
+    onTriggered: action => {
+                   var popupMenuWindow = PanelService.getPopupMenuWindow(screen);
+                   if (popupMenuWindow) {
+                     popupMenuWindow.close();
+                   }
+
+                   if (action === "activate" && selectedWindow) {
+                     CompositorService.focusWindow(selectedWindow);
+                   } else if (action === "close" && selectedWindow) {
+                     CompositorService.closeWindow(selectedWindow);
+                   } else if (action === "widget-settings") {
+                     BarService.openWidgetSettings(screen, section, sectionWidgetIndex, widgetId, widgetSettings);
+                   }
+                   selectedWindow = null;
+                   selectedAppName = "";
+                 }
+  }
+
+  // Debounce timer for wheel interactions
+  Timer {
+    id: wheelDebounce
+    interval: 150
+    repeat: false
+    onTriggered: {
+      root.wheelCooldown = false;
+      root.wheelAccumulatedDelta = 0;
+    }
+  }
+
+  // Scroll to switch workspaces
+  WheelHandler {
+    id: wheelHandler
+    target: root
+    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+    onWheel: function (event) {
+      if (root.wheelCooldown)
+        return;
+      // Prefer vertical delta, fall back to horizontal if needed
+      var dy = event.angleDelta.y;
+      var dx = event.angleDelta.x;
+      var useDy = Math.abs(dy) >= Math.abs(dx);
+      var delta = useDy ? dy : dx;
+      // One notch is typically 120
+      root.wheelAccumulatedDelta += delta;
+      var step = 120;
+      if (Math.abs(root.wheelAccumulatedDelta) >= step) {
+        var direction = root.wheelAccumulatedDelta > 0 ? -1 : 1;
+        // For vertical layout, natural mapping: wheel up -> previous, down -> next (already handled by sign)
+        // For horizontal layout, same mapping using vertical wheel
+        root.switchByOffset(direction);
+        root.wheelCooldown = true;
+        wheelDebounce.restart();
+        root.wheelAccumulatedDelta = 0;
+        event.accepted = true;
+      }
+    }
+  }
+
   Component {
     id: workspaceRepeaterDelegate
 
@@ -140,136 +268,39 @@ Item {
 
       radius: Style.radiusS
       border.color: workspaceModel.isFocused ? Color.mPrimary : Color.mOutline
-      border.width: 1
+      border.width: Style.borderS
       width: (hasWindows ? iconsFlow.implicitWidth : root.itemSize * 0.8) + (root.isVerticalBar ? Style.marginXS : Style.marginL)
       height: (hasWindows ? iconsFlow.implicitHeight : root.itemSize * 0.8) + (root.isVerticalBar ? Style.marginL : Style.marginXS)
-      color: Settings.data.bar.showCapsule ? Color.mSurfaceVariant : Color.transparent
+      color: Style.capsuleColor
 
       MouseArea {
         anchors.fill: parent
         hoverEnabled: true
         enabled: !hasWindows
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: {
-          CompositorService.switchToWorkspace(workspaceModel)
-        }
-      }
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        preventStealing: true
+        onPressed: mouse => {
+                     if (mouse.button === Qt.LeftButton) {
+                       CompositorService.switchToWorkspace(workspaceModel);
+                     }
+                   }
+        onReleased: mouse => {
+                      if (mouse.button === Qt.RightButton) {
+                        mouse.accepted = true;
+                        TooltipService.hide();
+                        root.selectedWindow = "";
+                        root.selectedAppName = "";
 
-      Item {
-        id: workspaceNumberContainer
-
-        visible: root.showWorkspaceNumbers && (!root.showNumbersOnlyWhenOccupied || hasWindows)
-
-        anchors {
-          left: parent.left
-          top: parent.top
-          leftMargin: -Style.fontSizeXS * 0.5
-          topMargin: -Style.fontSizeXS * 0.5
-        }
-
-        width: Math.max(workspaceNumber.implicitWidth + Style.marginXS, Style.fontSizeXXS * 2)
-        height: Math.max(workspaceNumber.implicitHeight + Style.marginXS, Style.fontSizeXXS * 2)
-
-        Rectangle {
-          id: workspaceNumberBackground
-
-          anchors.fill: parent
-          radius: width * 0.5
-
-          color: {
-            if (workspaceModel.isFocused)
-              return Color.mPrimary
-            if (workspaceModel.isUrgent)
-              return Color.mError
-            if (hasWindows)
-              return Color.mSecondary
-
-            return Qt.alpha(Color.mOutline, 0.3)
-          }
-
-          scale: workspaceModel.isActive ? 1.0 : 0.9
-
-          Behavior on scale {
-            NumberAnimation {
-              duration: Style.animationNormal
-              easing.type: Easing.OutBack
-            }
-          }
-
-          Behavior on color {
-            ColorAnimation {
-              duration: Style.animationFast
-              easing.type: Easing.InOutCubic
-            }
-          }
-        }
-
-        // Burst effect overlay for focused workspace number (smaller outline)
-        Rectangle {
-          id: workspaceNumberBurst
-          anchors.centerIn: workspaceNumberContainer
-          width: workspaceNumberContainer.width + 12 * root.masterProgress
-          height: workspaceNumberContainer.height + 12 * root.masterProgress
-          radius: width / 2
-          color: Color.transparent
-          border.color: root.effectColor
-          border.width: Math.max(1, Math.round((2 + 4 * (1.0 - root.masterProgress))))
-          opacity: root.effectsActive && workspaceModel.isFocused ? (1.0 - root.masterProgress) * 0.7 : 0
-          visible: root.effectsActive && workspaceModel.isFocused
-          z: 1
-        }
-
-        NText {
-          id: workspaceNumber
-
-          anchors.centerIn: parent
-
-          text: workspaceModel.idx.toString()
-
-          family: Settings.data.ui.fontFixed
-          font {
-            pointSize: Style.fontSizeXXS
-            weight: Style.fontWeightBold
-            capitalization: Font.AllUppercase
-          }
-          applyUiScale: false
-
-          color: {
-            if (workspaceModel.isFocused)
-              return Color.mOnPrimary
-            if (workspaceModel.isUrgent)
-              return Color.mOnError
-            if (hasWindows)
-              return Color.mOnSecondary
-
-            return Color.mOnSurface
-          }
-
-          opacity: {
-            if (workspaceModel.isFocused)
-              return 1.0
-            if (workspaceModel.isUrgent)
-              return 0.9
-            if (hasWindows)
-              return 0.8
-
-            return 0.6
-          }
-
-          Behavior on opacity {
-            NumberAnimation {
-              duration: Style.animationFast
-              easing.type: Easing.InOutCubic
-            }
-          }
-        }
-
-        Behavior on opacity {
-          NumberAnimation {
-            duration: Style.animationFast
-            easing.type: Easing.InOutCubic
-          }
-        }
+                        // Store position and size for timer callback
+                        const globalPos = container.mapToItem(root, 0, 0);
+                        contextMenuOpenTimer1.globalX = globalPos.x;
+                        contextMenuOpenTimer1.globalY = globalPos.y;
+                        contextMenuOpenTimer1.itemWidth = container.width;
+                        contextMenuOpenTimer1.itemHeight = container.height;
+                        contextMenuOpenTimer1.restart();
+                      }
+                    }
       }
 
       Flow {
@@ -309,7 +340,7 @@ Item {
               smooth: true
               asynchronous: true
               opacity: model.isFocused ? Style.opacityFull : 0.6
-              layer.enabled: widgetSettings.colorizeIcons === true
+              layer.enabled: root.colorizeIcons && !model.isFocused
 
               Behavior on opacity {
                 NumberAnimation {
@@ -326,7 +357,7 @@ Item {
                 width: model.isFocused ? 4 : 0
                 height: model.isFocused ? 4 : 0
                 color: model.isFocused ? Color.mPrimary : Color.transparent
-                radius: width * 0.5
+                radius: Math.min(Style.radiusXXS, width / 2)
               }
 
               layer.effect: ShaderEffect {
@@ -341,49 +372,268 @@ Item {
               hoverEnabled: true
               cursorShape: Qt.PointingHandCursor
               acceptedButtons: Qt.LeftButton | Qt.RightButton
+              preventStealing: true
 
-              onPressed: function (mouse) {
-                if (!model) {
-                  return
-                }
+              onPressed: mouse => {
+                           if (!model) {
+                             return;
+                           }
 
-                if (mouse.button === Qt.LeftButton) {
-                  CompositorService.focusWindow(model)
-                } else if (mouse.button === Qt.RightButton) {
-                  CompositorService.closeWindow(model)
-                }
-              }
+                           if (mouse.button === Qt.LeftButton) {
+                             CompositorService.focusWindow(model);
+                           }
+                         }
+
+              onReleased: mouse => {
+                            if (!model) {
+                              return;
+                            }
+
+                            if (mouse.button === Qt.RightButton) {
+                              mouse.accepted = true;
+                              TooltipService.hide();
+                              root.selectedWindow = model;
+                              root.selectedAppName = CompositorService.getCleanAppName(model.appId, model.title);
+
+                              // Store position and size for timer callback
+                              const globalPos = taskbarItem.mapToItem(root, 0, 0);
+                              contextMenuOpenTimer2.globalX = globalPos.x;
+                              contextMenuOpenTimer2.globalY = globalPos.y;
+                              contextMenuOpenTimer2.itemWidth = taskbarItem.width;
+                              contextMenuOpenTimer2.itemHeight = taskbarItem.height;
+                              contextMenuOpenTimer2.restart();
+                            }
+                          }
               onEntered: {
-                taskbarItem.itemHovered = true
-                TooltipService.show(Screen, taskbarItem, model.title || model.appId || "Unknown app.", BarService.getTooltipDirection())
+                taskbarItem.itemHovered = true;
+                TooltipService.show(taskbarItem, model.title || model.appId || "Unknown app.", BarService.getTooltipDirection());
               }
               onExited: {
-                taskbarItem.itemHovered = false
-                TooltipService.hide()
+                taskbarItem.itemHovered = false;
+                TooltipService.hide();
               }
             }
           }
         }
       }
-    }
-  }
 
-  Flow {
-    id: taskbarGrid
+      Item {
+        id: workspaceNumberContainer
 
-    anchors.verticalCenter: isVerticalBar ? undefined : parent.verticalCenter
-    anchors.left: isVerticalBar ? undefined : parent.left
-    anchors.leftMargin: isVerticalBar ? 0 : Style.marginM
-    anchors.horizontalCenter: isVerticalBar ? parent.horizontalCenter : undefined
-    anchors.top: isVerticalBar ? parent.top : undefined
-    anchors.topMargin: isVerticalBar ? Style.marginM : 0
+        visible: root.labelMode !== "none" && (!root.showLabelsOnlyWhenOccupied || container.hasWindows)
 
-    spacing: Style.marginS
-    flow: isVerticalBar ? Flow.TopToBottom : Flow.LeftToRight
+        anchors {
+          left: parent.left
+          top: parent.top
+          leftMargin: -Style.fontSizeXS * 0.5
+          topMargin: -Style.fontSizeXS * 0.5
+        }
 
-    Repeater {
-      model: localWorkspaces
-      delegate: workspaceRepeaterDelegate
+        // Doube width margin necessary here for Name or Name+Index, but double height not needed.
+        width: Math.max(workspaceNumber.implicitWidth + (Style.marginXS * 2), Style.fontSizeXXS * 2)
+        height: Math.max(workspaceNumber.implicitHeight + Style.marginXS, Style.fontSizeXXS * 2)
+
+        Rectangle {
+          id: workspaceNumberBackground
+
+          anchors.fill: parent
+          radius: Math.min(Style.radiusL, width / 2)
+
+          color: {
+            if (workspaceModel.isFocused)
+              return Color.mPrimary;
+            if (workspaceModel.isUrgent)
+              return Color.mError;
+            if (hasWindows)
+              return Color.mSecondary;
+
+            if (Settings.data.colorSchemes.darkMode) {
+              return Qt.darker(Color.mSecondary, 1.5);
+            } else {
+              return Qt.lighter(Color.mSecondary, 1.5);
+            }
+          }
+
+          scale: workspaceModel.isActive ? 1.0 : 0.9
+
+          Behavior on scale {
+            NumberAnimation {
+              duration: Style.animationNormal
+              easing.type: Easing.OutBack
+            }
+          }
+
+          Behavior on color {
+            ColorAnimation {
+              duration: Style.animationFast
+              easing.type: Easing.InOutCubic
+            }
+          }
+        }
+
+        // Burst effect overlay for focused workspace number (smaller outline)
+        Rectangle {
+          id: workspaceNumberBurst
+          anchors.centerIn: workspaceNumberContainer
+          width: workspaceNumberContainer.width + 12 * root.masterProgress
+          height: workspaceNumberContainer.height + 12 * root.masterProgress
+          radius: width / 2
+          color: Color.transparent
+          border.color: root.effectColor
+          border.width: Math.max(1, Math.round((2 + 4 * (1.0 - root.masterProgress))))
+          opacity: root.effectsActive && workspaceModel.isFocused ? (1.0 - root.masterProgress) * 0.7 : 0
+          visible: root.effectsActive && workspaceModel.isFocused
+          z: 1
+        }
+
+        NText {
+          id: workspaceNumber
+
+          anchors.centerIn: parent
+
+          text: {
+            if (workspaceModel.name && workspaceModel.name.length > 0) {
+              if (root.labelMode === "name") {
+                return workspaceModel.name.substring(0, root.characterCount);
+              }
+              if (root.labelMode === "index+name") {
+                return (workspaceModel.idx.toString() + workspaceModel.name.substring(0, 1));
+              }
+            }
+            return workspaceModel.idx.toString();
+          }
+
+          family: Settings.data.ui.fontFixed
+          font {
+            pointSize: Style.fontSizeXXS
+            weight: Style.fontWeightBold
+            capitalization: Font.AllUppercase
+          }
+          applyUiScale: false
+
+          color: {
+            if (workspaceModel.isFocused)
+              return Color.mOnPrimary;
+            if (workspaceModel.isUrgent)
+              return Color.mOnError;
+            // if (hasWindows)
+            //   return Color.mOnSecondary;
+
+            return Color.mOnSecondary;
+          }
+
+          Behavior on opacity {
+            NumberAnimation {
+              duration: Style.animationFast
+              easing.type: Easing.InOutCubic
+            }
+          }
+        }
+
+        Behavior on opacity {
+          NumberAnimation {
+            duration: Style.animationFast
+            easing.type: Easing.InOutCubic
+          }
+        }
+      }
+
+      Flow {
+        id: taskbarGrid
+
+        anchors.verticalCenter: isVerticalBar ? undefined : parent.verticalCenter
+        anchors.left: isVerticalBar ? undefined : parent.left
+        anchors.leftMargin: isVerticalBar ? 0 : Style.marginM
+        anchors.horizontalCenter: isVerticalBar ? parent.horizontalCenter : undefined
+        anchors.top: isVerticalBar ? parent.top : undefined
+        anchors.topMargin: isVerticalBar ? Style.marginM : 0
+
+        spacing: Style.marginS
+        flow: isVerticalBar ? Flow.TopToBottom : Flow.LeftToRight
+
+        Repeater {
+          model: localWorkspaces
+          delegate: workspaceRepeaterDelegate
+        }
+      }
+
+      Timer {
+        id: contextMenuOpenTimer1
+        interval: 10
+        repeat: false
+        property real globalX: 0
+        property real globalY: 0
+        property real itemWidth: 0
+        property real itemHeight: 0
+        onTriggered: openContextMenu(globalX, globalY, itemWidth, itemHeight)
+      }
+
+      Timer {
+        id: contextMenuOpenTimer2
+        interval: 10
+        repeat: false
+        property real globalX: 0
+        property real globalY: 0
+        property real itemWidth: 0
+        property real itemHeight: 0
+        onTriggered: openContextMenu(globalX, globalY, itemWidth, itemHeight)
+      }
+
+      // --------------------------------------------------
+      function openContextMenu(globalX, globalY, itemWidth, itemHeight) {
+        // Directly build and set model as a new array (bypass binding issues)
+        var items = [];
+        if (root.selectedWindow) {
+          items.push({
+                       "label": I18n.tr("context-menu.activate-app", {
+                                          "app": root.selectedAppName
+                                        }),
+                       "action": "activate",
+                       "icon": "focus"
+                     });
+          items.push({
+                       "label": I18n.tr("context-menu.close-app", {
+                                          "app": root.selectedAppName
+                                        }),
+                       "action": "close",
+                       "icon": "x"
+                     });
+        }
+        items.push({
+                     "label": I18n.tr("context-menu.widget-settings"),
+                     "action": "widget-settings",
+                     "icon": "settings"
+                   });
+
+        // Set the model directly
+        contextMenu.model = items;
+
+        var popupMenuWindow = PanelService.getPopupMenuWindow(screen);
+        if (popupMenuWindow) {
+          popupMenuWindow.open();
+
+          // Calculate menu position
+          let menuX, menuY;
+          if (root.barPosition === "top") {
+            menuX = globalX + (itemWidth / 2) - (contextMenu.implicitWidth / 2);
+            menuY = Style.barHeight + Style.marginS;
+          } else if (root.barPosition === "bottom") {
+            const menuHeight = 12 + contextMenu.model.length * contextMenu.itemHeight;
+            menuX = globalX + (itemWidth / 2) - (contextMenu.implicitWidth / 2);
+            menuY = -menuHeight - Style.marginS;
+          } else if (root.barPosition === "left") {
+            menuX = Style.barHeight + Style.marginS;
+            menuY = globalY + (itemHeight / 2) - (contextMenu.implicitHeight / 2);
+          } else {
+            // right
+            menuX = -contextMenu.implicitWidth - Style.marginS;
+            menuY = globalY + (itemHeight / 2) - (contextMenu.implicitHeight / 2);
+          }
+
+          contextMenu.openAtItem(root, menuX, menuY);
+          popupMenuWindow.contentItem = contextMenu;
+        }
+      }
     }
   }
 }

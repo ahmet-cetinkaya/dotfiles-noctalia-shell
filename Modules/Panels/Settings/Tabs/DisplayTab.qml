@@ -1,12 +1,13 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Services.Compositor
-import qs.Services.Location
 import qs.Services.Hardware
+import qs.Services.Location
+import qs.Services.UI
 import qs.Widgets
 
 ColumnLayout {
@@ -19,13 +20,13 @@ ColumnLayout {
   Component.onCompleted: {
     for (var h = 0; h < 24; h++) {
       for (var m = 0; m < 60; m += 30) {
-        var hh = ("0" + h).slice(-2)
-        var mm = ("0" + m).slice(-2)
-        var key = hh + ":" + mm
+        var hh = ("0" + h).slice(-2);
+        var mm = ("0" + m).slice(-2);
+        var key = hh + ":" + mm;
         timeOptions.append({
                              "key": key,
                              "name": key
-                           })
+                           });
       }
     }
   }
@@ -38,12 +39,12 @@ ColumnLayout {
 
     onExited: function (exitCode) {
       if (exitCode === 0) {
-        Settings.data.nightLight.enabled = true
-        NightLightService.apply()
-        ToastService.showNotice(I18n.tr("settings.display.night-light.section.label"), I18n.tr("toast.night-light.enabled"), "nightlight-on")
+        Settings.data.nightLight.enabled = true;
+        NightLightService.apply();
+        ToastService.showNotice(I18n.tr("settings.display.night-light.section.label"), I18n.tr("toast.night-light.enabled"), "nightlight-on");
       } else {
-        Settings.data.nightLight.enabled = false
-        ToastService.showWarning(I18n.tr("settings.display.night-light.section.label"), I18n.tr("toast.night-light.not-installed"))
+        Settings.data.nightLight.enabled = false;
+        ToastService.showWarning(I18n.tr("settings.display.night-light.section.label"), I18n.tr("toast.night-light.not-installed"));
       }
     }
 
@@ -83,13 +84,13 @@ ColumnLayout {
           NLabel {
             label: modelData.name || "Unknown"
             description: {
-              const compositorScale = CompositorService.getDisplayScale(modelData.name)
+              const compositorScale = CompositorService.getDisplayScale(modelData.name);
               I18n.tr("system.monitor-description", {
                         "model": modelData.model,
                         "width": modelData.width * compositorScale,
                         "height": modelData.height * compositorScale,
                         "scale": compositorScale
-                      })
+                      });
             }
           }
 
@@ -118,12 +119,12 @@ ColumnLayout {
                 enabled: brightnessMonitor ? brightnessMonitor.brightnessControlAvailable : false
                 onMoved: value => {
                            if (brightnessMonitor && brightnessMonitor.brightnessControlAvailable) {
-                             brightnessMonitor.setBrightness(value)
+                             brightnessMonitor.setBrightness(value);
                            }
                          }
                 onPressedChanged: (pressed, value) => {
                                     if (brightnessMonitor && brightnessMonitor.brightnessControlAvailable) {
-                                      brightnessMonitor.setBrightness(value)
+                                      brightnessMonitor.setBrightness(value);
                                     }
                                   }
                 Layout.fillWidth: true
@@ -189,7 +190,7 @@ ColumnLayout {
       description: I18n.tr("settings.display.monitors.external-brightness.description")
       checked: Settings.data.brightness.enableDdcSupport
       onToggled: checked => {
-                   Settings.data.brightness.enableDdcSupport = checked
+                   Settings.data.brightness.enableDdcSupport = checked;
                    // DDC detection will run on next monitor change when enabled
                    // Monitors will stop using DDC immediately when disabled
                  }
@@ -220,74 +221,141 @@ ColumnLayout {
     onToggled: checked => {
                  if (checked) {
                    // Verify wlsunset exists before enabling
-                   wlsunsetCheck.running = true
+                   wlsunsetCheck.running = true;
                  } else {
-                   Settings.data.nightLight.enabled = false
-                   Settings.data.nightLight.forced = false
-                   NightLightService.apply()
-                   ToastService.showNotice(I18n.tr("settings.display.night-light.section.label"), I18n.tr("toast.night-light.disabled"), "nightlight-off")
+                   Settings.data.nightLight.enabled = false;
+                   Settings.data.nightLight.forced = false;
+                   NightLightService.apply();
+                   ToastService.showNotice(I18n.tr("settings.display.night-light.section.label"), I18n.tr("toast.night-light.disabled"), "nightlight-off");
                  }
                }
   }
 
   // Temperature
   ColumnLayout {
-    spacing: Style.marginXS
-    Layout.alignment: Qt.AlignVCenter
+    visible: Settings.data.nightLight.enabled
+    spacing: Style.marginM
+    Layout.fillWidth: true
 
+    // Night temperature
     NLabel {
-      label: I18n.tr("settings.display.night-light.temperature.label")
-      description: I18n.tr("settings.display.night-light.temperature.description")
+      label: I18n.tr("settings.display.night-light.temperature.night")
+      description: I18n.tr("settings.display.night-light.temperature.night-description")
+      Layout.fillWidth: true
     }
 
     RowLayout {
-      visible: Settings.data.nightLight.enabled
+      Layout.fillWidth: true
       spacing: Style.marginM
-      Layout.fillWidth: false
-      Layout.fillHeight: true
-      Layout.alignment: Qt.AlignVCenter
 
-      NText {
-        text: I18n.tr("settings.display.night-light.temperature.night")
-        pointSize: Style.fontSizeM
-        color: Color.mOnSurfaceVariant
-        Layout.alignment: Qt.AlignVCenter
-      }
+      NSlider {
+        id: nightSlider
+        Layout.fillWidth: true
 
-      NTextInput {
-        text: Settings.data.nightLight.nightTemp
-        inputMethodHints: Qt.ImhDigitsOnly
-        Layout.alignment: Qt.AlignVCenter
-        onEditingFinished: {
-          var nightTemp = parseInt(text)
-          var dayTemp = parseInt(Settings.data.nightLight.dayTemp)
-          if (!isNaN(nightTemp) && !isNaN(dayTemp)) {
-            // Clamp value between [1000 .. (dayTemp-500)]
-            var clampedValue = Math.min(dayTemp - 500, Math.max(1000, nightTemp))
-            text = Settings.data.nightLight.nightTemp = clampedValue.toString()
+        from: 1000
+        to: 6500
+        value: Settings.data.nightLight.nightTemp
+
+        // Clamp as the thumb moves, but do NOT change Settings here
+        onValueChanged: {
+          var dayTemp = parseInt(Settings.data.nightLight.dayTemp);
+          var v = Math.round(value);
+
+          if (!isNaN(dayTemp)) {
+            var maxNight = dayTemp - 500;
+            v = Math.min(maxNight, Math.max(1000, v));
+          } else {
+            v = Math.max(1000, v);
+          }
+
+          if (v !== value)
+            value = v;
+        }
+
+        // Only write back to Settings when the user releases the slider
+        onPressedChanged: {
+          if (!pressed) {
+            var dayTemp = parseInt(Settings.data.nightLight.dayTemp);
+            var v = Math.round(value);
+
+            if (!isNaN(dayTemp)) {
+              var maxNight = dayTemp - 500;
+              v = Math.min(maxNight, Math.max(1000, v));
+            } else {
+              v = Math.max(1000, v);
+            }
+
+            Settings.data.nightLight.nightTemp = v;
           }
         }
       }
 
       NText {
-        text: I18n.tr("settings.display.night-light.temperature.day")
+        text: nightSlider.value + "K"
         pointSize: Style.fontSizeM
         color: Color.mOnSurfaceVariant
         Layout.alignment: Qt.AlignVCenter
       }
-      NTextInput {
-        text: Settings.data.nightLight.dayTemp
-        inputMethodHints: Qt.ImhDigitsOnly
-        Layout.alignment: Qt.AlignVCenter
-        onEditingFinished: {
-          var dayTemp = parseInt(text)
-          var nightTemp = parseInt(Settings.data.nightLight.nightTemp)
-          if (!isNaN(nightTemp) && !isNaN(dayTemp)) {
-            // Clamp value between [(nightTemp+500) .. 6500]
-            var clampedValue = Math.max(nightTemp + 500, Math.min(6500, dayTemp))
-            text = Settings.data.nightLight.dayTemp = clampedValue.toString()
+    }
+
+    // Day temperature
+    NLabel {
+      label: I18n.tr("settings.display.night-light.temperature.day")
+      description: I18n.tr("settings.display.night-light.temperature.day-description")
+      Layout.fillWidth: true
+    }
+
+    RowLayout {
+      Layout.fillWidth: true
+      spacing: Style.marginM
+
+      NSlider {
+        id: daySlider
+        Layout.fillWidth: true
+
+        from: 1000
+        to: 6500
+        value: Settings.data.nightLight.dayTemp
+
+        // Clamp as the thumb moves, but do NOT change Settings here
+        onValueChanged: {
+          var nightTemp = parseInt(Settings.data.nightLight.nightTemp);
+          var v = Math.round(value);
+
+          if (!isNaN(nightTemp)) {
+            var minDay = nightTemp + 500;
+            v = Math.max(minDay, Math.min(6500, v));
+          } else {
+            v = Math.min(6500, v);
+          }
+
+          if (v !== value)
+            value = v;
+        }
+
+        // Only write back to Settings when the user releases the slider
+        onPressedChanged: {
+          if (!pressed) {
+            var nightTemp = parseInt(Settings.data.nightLight.nightTemp);
+            var v = Math.round(value);
+
+            if (!isNaN(nightTemp)) {
+              var minDay = nightTemp + 500;
+              v = Math.max(minDay, Math.min(6500, v));
+            } else {
+              v = Math.min(6500, v);
+            }
+
+            Settings.data.nightLight.dayTemp = v;
           }
         }
+      }
+
+      NText {
+        text: daySlider.value + "K"
+        pointSize: Style.fontSizeM
+        color: Color.mOnSurfaceVariant
+        Layout.alignment: Qt.AlignVCenter
       }
     }
   }
@@ -305,6 +373,7 @@ ColumnLayout {
   // Manual scheduling
   ColumnLayout {
     spacing: Style.marginS
+    Layout.fillWidth: true
     visible: Settings.data.nightLight.enabled && !Settings.data.nightLight.autoSchedule && !Settings.data.nightLight.forced
 
     NLabel {
@@ -312,14 +381,16 @@ ColumnLayout {
       description: I18n.tr("settings.display.night-light.manual-schedule.description")
     }
 
+    // Sunrise time
     RowLayout {
-      Layout.fillWidth: false
+      Layout.fillWidth: true
       spacing: Style.marginS
 
       NText {
         text: I18n.tr("settings.display.night-light.manual-schedule.sunrise")
         pointSize: Style.fontSizeM
         color: Color.mOnSurfaceVariant
+        Layout.alignment: Qt.AlignVCenter
       }
 
       NComboBox {
@@ -327,17 +398,20 @@ ColumnLayout {
         currentKey: Settings.data.nightLight.manualSunrise
         placeholder: I18n.tr("settings.display.night-light.manual-schedule.select-start")
         onSelected: key => Settings.data.nightLight.manualSunrise = key
-        minimumWidth: 120
+        Layout.fillWidth: true
       }
+    }
 
-      Item {
-        Layout.preferredWidth: 20
-      }
+    // Sunset time
+    RowLayout {
+      Layout.fillWidth: true
+      spacing: Style.marginS
 
       NText {
         text: I18n.tr("settings.display.night-light.manual-schedule.sunset")
         pointSize: Style.fontSizeM
         color: Color.mOnSurfaceVariant
+        Layout.alignment: Qt.AlignVCenter
       }
 
       NComboBox {
@@ -345,7 +419,7 @@ ColumnLayout {
         currentKey: Settings.data.nightLight.manualSunset
         placeholder: I18n.tr("settings.display.night-light.manual-schedule.select-stop")
         onSelected: key => Settings.data.nightLight.manualSunset = key
-        minimumWidth: 120
+        Layout.fillWidth: true
       }
     }
   }
@@ -356,12 +430,12 @@ ColumnLayout {
     description: I18n.tr("settings.display.night-light.force-activation.description")
     checked: Settings.data.nightLight.forced
     onToggled: checked => {
-                 Settings.data.nightLight.forced = checked
+                 Settings.data.nightLight.forced = checked;
                  if (checked && !Settings.data.nightLight.enabled) {
                    // Ensure enabled when forcing
-                   wlsunsetCheck.running = true
+                   wlsunsetCheck.running = true;
                  } else {
-                   NightLightService.apply()
+                   NightLightService.apply();
                  }
                }
     visible: Settings.data.nightLight.enabled

@@ -1,229 +1,453 @@
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
-import qs.Widgets
 import qs.Services.Hardware
+import qs.Services.Keyboard
 import qs.Services.Media
-import qs.Services.System
+import qs.Widgets
 
-// Unified OSD component
-// Loader activates only when showing OSD, deactivates when hidden to save resources
+// Unified OSD component that displays volume, input volume, and brightness changes
 Variants {
-  model: Quickshell.screens.filter(screen => (Settings.data.osd.monitors.includes(screen.name) || (Settings.data.osd.monitors.length === 0)) && Settings.data.osd.enabled)
+  id: osd
+
+  // Do not change the order or it will break settings.
+  enum Type {
+    Volume,
+    InputVolume,
+    Brightness,
+    LockKey
+  }
+
+  model: Quickshell.screens.filter(screen => (Settings.data.osd.monitors.includes(screen.name) || Settings.data.osd.monitors.length === 0) && Settings.data.osd.enabled)
 
   delegate: Loader {
     id: root
 
     required property ShellScreen modelData
 
-    // Access the notification model from the service
-    property ListModel notificationModel: NotificationService.activeList
-
-    // Loader is only active when actually showing something
     active: false
 
-    // Current OSD display state
-    property string currentOSDType: "" // "volume", "inputVolume", "brightness", or ""
+    // OSD State
+    property int currentOSDType: -1 // OSD.Type enum value, -1 means none
+    property bool startupComplete: false
+    property real currentBrightness: 0
 
-    // Volume properties
+    // Lock Key States
+    property string lastLockKeyChanged: ""  // "caps", "num", "scroll", or ""
+
+    // Current values (computed properties)
     readonly property real currentVolume: AudioService.volume
     readonly property bool isMuted: AudioService.muted
-    property bool volumeInitialized: false
-    property bool muteInitialized: false
-
-    // Input volume properties
     readonly property real currentInputVolume: AudioService.inputVolume
     readonly property bool isInputMuted: AudioService.inputMuted
-    property bool inputAudioInitialized: false
+    readonly property real epsilon: 0.005
 
-    // Brightness properties
-    property real lastUpdatedBrightness: 0
-    readonly property real currentBrightness: lastUpdatedBrightness
-    property bool brightnessInitialized: false
+    // LockKey OSD enabled state (reactive to settings)
+    readonly property bool lockKeyOSDEnabled: {
+      const enabledTypes = Settings.data.osd.enabledTypes || [];
+      // If enabledTypes is empty, no types are enabled (no OSD will be shown)
+      if (enabledTypes.length === 0)
+        return false;
+      return enabledTypes.includes(OSD.Type.LockKey);
+    }
 
-    // Get appropriate icon based on current OSD type
+    // Helper Functions
     function getIcon() {
-      if (currentOSDType === "volume") {
-        if (AudioService.muted) {
-          return "volume-mute"
-        }
-        return (AudioService.volume <= Number.EPSILON) ? "volume-zero" : (AudioService.volume <= 0.5) ? "volume-low" : "volume-high"
-      } else if (currentOSDType === "inputVolume") {
-        if (AudioService.inputMuted) {
-          return "microphone-off"
-        }
-        return "microphone"
-      } else if (currentOSDType === "brightness") {
-        return currentBrightness <= 0.5 ? "brightness-low" : "brightness-high"
+      switch (currentOSDType) {
+      case OSD.Type.Volume:
+        if (isMuted)
+          return "volume-mute";
+        // Show volume-x icon when volume is effectively 0% (within rounding threshold)
+        if (currentVolume < root.epsilon)
+          return "volume-x";
+        return currentVolume <= 0.5 ? "volume-low" : "volume-high";
+      case OSD.Type.InputVolume:
+        return isInputMuted ? "microphone-off" : "microphone";
+      case OSD.Type.Brightness:
+        // Show sun-off icon when brightness is effectively 0% (within rounding threshold)
+        if (currentBrightness < root.epsilon)
+          return "sun-off";
+        return currentBrightness <= 0.5 ? "brightness-low" : "brightness-high";
+      case OSD.Type.LockKey:
+        return "keyboard";
+      default:
+        return "";
       }
-      return ""
     }
 
-    // Get current value (0-1 range)
     function getCurrentValue() {
-      if (currentOSDType === "volume") {
-        return isMuted ? 0 : currentVolume
-      } else if (currentOSDType === "inputVolume") {
-        return isInputMuted ? 0 : currentInputVolume
-      } else if (currentOSDType === "brightness") {
-        return currentBrightness
+      switch (currentOSDType) {
+      case OSD.Type.Volume:
+        return isMuted ? 0 : currentVolume;
+      case OSD.Type.InputVolume:
+        return isInputMuted ? 0 : currentInputVolume;
+      case OSD.Type.Brightness:
+        return currentBrightness;
+      case OSD.Type.LockKey:
+        return 1.0; // Always show 100% when showing lock key status
+      default:
+        return 0;
       }
-      return 0
     }
 
-    // Get maximum value for current OSD type
     function getMaxValue() {
-      if (currentOSDType === "volume" || currentOSDType === "inputVolume") {
-        return Settings.data.audio.volumeOverdrive ? 1.5 : 1.0
-      } else if (currentOSDType === "brightness") {
-        return 1.0
+      if (currentOSDType === OSD.Type.Volume || currentOSDType === OSD.Type.InputVolume) {
+        return Settings.data.audio.volumeOverdrive ? 1.5 : 1.0;
       }
-      return 1.0
+      return 1.0;
     }
 
-    // Get display percentage
     function getDisplayPercentage() {
-      if (currentOSDType === "volume") {
-        if (isMuted)
-          return "0%"
-        const max = getMaxValue()
-        const pct = Math.round(Math.min(max, currentVolume) * 100)
-        return pct + "%"
-      } else if (currentOSDType === "inputVolume") {
-        if (isInputMuted)
-          return "0%"
-        const max = getMaxValue()
-        const pct = Math.round(Math.min(max, currentInputVolume) * 100)
-        return pct + "%"
-      } else if (currentOSDType === "brightness") {
-        const pct = Math.round(Math.min(1.0, currentBrightness) * 100)
-        return pct + "%"
+      if (currentOSDType === OSD.Type.LockKey) {
+        // For lock keys, return the pre-determined status text
+        return lastLockKeyChanged;
       }
-      return ""
+
+      const value = getCurrentValue();
+      const max = getMaxValue();
+      if ((currentOSDType === OSD.Type.Volume || currentOSDType === OSD.Type.InputVolume) && Settings.data.audio.volumeOverdrive) {
+        const pct = Math.round(value * 100);
+        return pct + "%";
+      }
+      const pct = Math.round(Math.min(max, value) * 100);
+      return pct + "%";
     }
 
-    // Get progress bar color
     function getProgressColor() {
-      if (currentOSDType === "volume") {
-        if (isMuted)
-          return Color.mError
-        return Color.mPrimary
-      } else if (currentOSDType === "inputVolume") {
-        if (isInputMuted)
-          return Color.mError
-        return Color.mPrimary
+      const isMutedState = (currentOSDType === OSD.Type.Volume && isMuted) || (currentOSDType === OSD.Type.InputVolume && isInputMuted);
+      if (isMutedState) {
+        return Color.mError;
       }
-      return Color.mPrimary
+      // When volumeOverdrive is enabled, show error color if volume is above 100%
+      if ((currentOSDType === OSD.Type.Volume || currentOSDType === OSD.Type.InputVolume) && Settings.data.audio.volumeOverdrive) {
+        const value = getCurrentValue();
+        if (value > 1.0) {
+          return Color.mError;
+        }
+      }
+      // For lock keys, use a different color to indicate the lock state
+      if (currentOSDType === OSD.Type.LockKey) {
+        // Check the specific lock key that was changed
+        if (lastLockKeyChanged.startsWith("CAPS")) {
+          return LockKeysService.capsLockOn ? Color.mPrimary : Color.mOnSurfaceVariant;
+        } else if (lastLockKeyChanged.startsWith("NUM")) {
+          return LockKeysService.numLockOn ? Color.mPrimary : Color.mOnSurfaceVariant;
+        } else if (lastLockKeyChanged.startsWith("SCROLL")) {
+          return LockKeysService.scrollLockOn ? Color.mPrimary : Color.mOnSurfaceVariant;
+        }
+      }
+      return Color.mPrimary;
     }
 
-    // Get icon color
     function getIconColor() {
-      if ((currentOSDType === "volume" && isMuted) || (currentOSDType === "inputVolume" && isInputMuted)) {
-        return Color.mError
+      const isMutedState = (currentOSDType === OSD.Type.Volume && isMuted) || (currentOSDType === OSD.Type.InputVolume && isInputMuted);
+      if (isMutedState)
+        return Color.mError;
+
+      if (currentOSDType === OSD.Type.LockKey) {
+        // Check the specific lock key that was changed
+        if (lastLockKeyChanged.startsWith("CAPS")) {
+          return LockKeysService.capsLockOn ? Color.mPrimary : Color.mOnSurfaceVariant;
+        } else if (lastLockKeyChanged.startsWith("NUM")) {
+          return LockKeysService.numLockOn ? Color.mPrimary : Color.mOnSurfaceVariant;
+        } else if (lastLockKeyChanged.startsWith("SCROLL")) {
+          return LockKeysService.scrollLockOn ? Color.mPrimary : Color.mOnSurfaceVariant;
+        }
       }
-      return Color.mOnSurface
+
+      return Color.mOnSurface;
     }
 
+    // Brightness Handling
+    function connectBrightnessMonitors() {
+      for (var i = 0; i < BrightnessService.monitors.length; i++) {
+        const monitor = BrightnessService.monitors[i];
+        monitor.brightnessUpdated.disconnect(onBrightnessChanged);
+        monitor.brightnessUpdated.connect(onBrightnessChanged);
+      }
+    }
+
+    function onBrightnessChanged(newBrightness) {
+      root.currentBrightness = newBrightness;
+      showOSD(OSD.Type.Brightness);
+    }
+
+    // Check if a specific OSD type is enabled
+    function isTypeEnabled(type) {
+      const enabledTypes = Settings.data.osd.enabledTypes || [];
+      // If enabledTypes is empty, no types are enabled (no OSD will be shown)
+      if (enabledTypes.length === 0)
+        return false;
+      return enabledTypes.includes(type);
+    }
+
+    // OSD Display Control
+    function showOSD(type) {
+      // Ignore all OSD requests during startup period
+      if (!startupComplete)
+        return;
+
+      // Check if this OSD type is enabled
+      if (!isTypeEnabled(type))
+        return;
+
+      currentOSDType = type;
+
+      if (!root.active) {
+        root.active = true;
+      }
+
+      if (root.item) {
+        root.item.showOSD();
+      } else {
+        Qt.callLater(() => {
+                       if (root.item)
+                       root.item.showOSD();
+                     });
+      }
+    }
+
+    function hideOSD() {
+      if (root.item?.osdItem) {
+        root.item.osdItem.hideImmediately();
+      } else if (root.active) {
+        root.active = false;
+      }
+    }
+
+    // Signal Connections
+
+    // AudioService monitoring
+    Connections {
+      target: AudioService
+
+      function onVolumeChanged() {
+        showOSD(OSD.Type.Volume);
+      }
+
+      function onMutedChanged() {
+        if (AudioService.consumeOutputOSDSuppression())
+          return;
+        showOSD(OSD.Type.Volume);
+      }
+
+      function onInputVolumeChanged() {
+        if (AudioService.hasInput)
+          showOSD(OSD.Type.InputVolume);
+      }
+
+      function onInputMutedChanged() {
+        if (!AudioService.hasInput)
+          return;
+        if (AudioService.consumeInputOSDSuppression())
+          return;
+        showOSD(OSD.Type.InputVolume);
+      }
+
+      // Refresh OSD when device changes to ensure correct volume is displayed
+      function onSinkChanged() {
+        // If volume OSD is currently showing, refresh it to show new device's volume
+        if (root.currentOSDType === OSD.Type.Volume) {
+          Qt.callLater(() => {
+                         showOSD(OSD.Type.Volume);
+                       });
+        }
+      }
+
+      function onSourceChanged() {
+        // If input volume OSD is currently showing, refresh it to show new device's volume
+        if (root.currentOSDType === OSD.Type.InputVolume) {
+          Qt.callLater(() => {
+                         showOSD(OSD.Type.InputVolume);
+                       });
+        }
+      }
+    }
+
+    // Brightness monitoring
+    Connections {
+      target: BrightnessService
+      function onMonitorsChanged() {
+        connectBrightnessMonitors();
+      }
+    }
+
+    // LockKeys monitoring with a cleaner approach
+    // Only connect when LockKey OSD is enabled to avoid starting the service unnecessarily
+    Connections {
+      target: root.lockKeyOSDEnabled ? LockKeysService : null
+
+      function onCapsLockChanged(active) {
+        root.lastLockKeyChanged = active ? "CAPS ON" : "CAPS OFF";
+        root.showOSD(OSD.Type.LockKey);
+      }
+
+      function onNumLockChanged(active) {
+        root.lastLockKeyChanged = active ? "NUM ON" : "NUM OFF";
+        root.showOSD(OSD.Type.LockKey);
+      }
+
+      function onScrollLockChanged(active) {
+        root.lastLockKeyChanged = active ? "SCROLL ON" : "SCROLL OFF";
+        root.showOSD(OSD.Type.LockKey);
+      }
+    }
+
+    // Startup timer - connect brightness monitors and enable OSD after 2 seconds
+    Timer {
+      id: startupTimer
+      interval: 2000
+      running: true
+      onTriggered: {
+        connectBrightnessMonitors();
+        root.startupComplete = true;
+      }
+    }
+
+    // Visual Component
     sourceComponent: PanelWindow {
       id: panel
       screen: modelData
 
-      readonly property string location: (Settings.data.osd && Settings.data.osd.location) ? Settings.data.osd.location : "top_right"
-      readonly property bool isTop: (location === "top") || (location.length >= 3 && location.substring(0, 3) === "top")
-      readonly property bool isBottom: (location === "bottom") || (location.length >= 6 && location.substring(0, 6) === "bottom")
-      readonly property bool isLeft: (location.indexOf("_left") >= 0) || (location === "left")
-      readonly property bool isRight: (location.indexOf("_right") >= 0) || (location === "right")
-      readonly property bool isCentered: (location === "top" || location === "bottom")
-      readonly property bool verticalMode: (location === "left" || location === "right")
-      readonly property int hWidth: Math.round(320 * Style.uiScaleRatio)
-      readonly property int hHeight: Math.round(72 * Style.uiScaleRatio)
-      readonly property int vWidth: Math.round(72 * Style.uiScaleRatio)
-      readonly property int vHeight: Math.round(280 * Style.uiScaleRatio)
+      // Position configuration
+      readonly property string location: Settings.data.osd?.location || "top_right"
+      readonly property bool isTop: location === "top" || location.startsWith("top")
+      readonly property bool isBottom: location === "bottom" || location.startsWith("bottom")
+      readonly property bool isLeft: location.includes("_left") || location === "left"
+      readonly property bool isRight: location.includes("_right") || location === "right"
+      readonly property bool verticalMode: location === "left" || location === "right"
 
-      // Ensure an even width to keep the vertical bar perfectly centered
-      readonly property int barThickness: {
-        const base = Math.max(8, Math.round(8 * Style.uiScaleRatio))
-        return (base % 2 === 0) ? base : base + 1
+      // Hidden text element for measuring lock key text width
+      NText {
+        id: lockKeyTextMetrics
+        visible: false
+        text: root.getDisplayPercentage()
+        pointSize: Style.fontSizeM
+        family: Settings.data.ui.fontFixed
+        font.weight: Style.fontWeightMedium
+        elide: Text.ElideNone
+        wrapMode: Text.NoWrap
       }
 
-      // Anchor selection based on location (window edges)
+      // Dimensions
+      readonly property bool isShortMode: root.currentOSDType === OSD.Type.LockKey
+      readonly property int longHWidth: Math.round(320 * Style.uiScaleRatio)
+      readonly property int longHHeight: Math.round(72 * Style.uiScaleRatio)
+      readonly property int shortHWidth: Math.round(180 * Style.uiScaleRatio)
+      readonly property int longVWidth: Math.round(80 * Style.uiScaleRatio)
+      readonly property int longVHeight: Math.round(280 * Style.uiScaleRatio)
+      readonly property int shortVHeight: Math.round(180 * Style.uiScaleRatio)
+
+      // Dynamic width for horizontal lock keys based on text length
+      // Explicitly bind to contentWidth to ensure reactivity
+      readonly property int lockKeyHWidth: {
+        if (root.currentOSDType !== OSD.Type.LockKey || verticalMode) {
+          return shortHWidth;
+        }
+        const text = root.getDisplayPercentage();
+        if (!text) {
+          return shortHWidth;
+        }
+        // Access contentWidth to create binding dependency
+        const textWidth = Math.ceil(lockKeyTextMetrics.contentWidth || 0);
+        if (textWidth === 0) {
+          // Fallback: estimate based on text length if measurement not ready
+          const fontSize = Style.fontSizeM * Settings.data.ui.fontFixedScale * Style.uiScaleRatio;
+          const estimatedWidth = text.length * fontSize * 0.6;
+          const iconWidth = Style.fontSizeXL * Style.uiScaleRatio;
+          const margins = Style.marginL * 2;
+          const spacing = Style.marginM;
+          const bgMargins = Style.marginM * 1.5 * 2;
+          return Math.max(shortHWidth, Math.round((estimatedWidth + iconWidth + margins + spacing + bgMargins) * 1.1));
+        }
+        const iconWidth = Style.fontSizeXL * Style.uiScaleRatio;
+        const margins = Style.marginL * 2; // Left and right content margins
+        const spacing = Style.marginM; // Spacing between icon and text
+        const bgMargins = Style.marginM * 1.5 * 2; // Background margins
+        const totalWidth = textWidth + iconWidth + margins + spacing + bgMargins;
+        // Ensure minimum width and add some buffer
+        return Math.max(shortHWidth, Math.round(totalWidth * 1.1));
+      }
+
+      // Dynamic height for vertical lock keys based on text length
+      readonly property int lockKeyVHeight: {
+        if (root.currentOSDType !== OSD.Type.LockKey || !verticalMode) {
+          return shortVHeight;
+        }
+        const text = root.getDisplayPercentage();
+        const charCount = text ? text.length : 0;
+        if (charCount === 0) {
+          return shortVHeight;
+        }
+        // Calculate height: font size * char count + margins + icon space
+        // Font size M (11pt) scaled, plus some spacing between chars
+        const fontSize = Style.fontSizeM * Settings.data.ui.fontFixedScale * Style.uiScaleRatio;
+        const charHeight = fontSize * 1.3; // Add 30% for line height (matches Layout.preferredHeight)
+        const textHeight = charCount * charHeight;
+        // Background margins (Style.marginM * 1.5 * 2 for top and bottom)
+        const bgMargins = Style.marginM * 1.5 * 2;
+        // Content margins (Style.marginL * 2 for top and bottom)
+        const contentMargins = Style.marginL * 2;
+        // Icon size: fontSizeXL scaled, with extra space for icon rendering and padding
+        const iconSize = Style.fontSizeXL * Style.uiScaleRatio * 1.8; // Add 80% for icon rendering and padding
+        // Spacing between text and icon (Style.marginM for lock keys)
+        const textIconSpacing = Style.marginM;
+        // Add extra buffer to ensure everything fits comfortably
+        const buffer = Style.marginL;
+        const totalHeight = textHeight + bgMargins + contentMargins + iconSize + textIconSpacing + buffer;
+        // Ensure minimum height and add extra padding for safety
+        return Math.max(shortVHeight, Math.round(totalHeight * 1.1));
+      }
+
+      readonly property int barThickness: {
+        const base = Math.max(8, Math.round(8 * Style.uiScaleRatio));
+        return base % 2 === 0 ? base : base + 1;
+      }
+
       anchors.top: isTop
       anchors.bottom: isBottom
       anchors.left: isLeft
       anchors.right: isRight
 
-      // Margins depending on bar position and chosen location
-      margins.top: {
-        if (!(anchors.top))
-          return 0
-        var base = Style.marginM
-        if (Settings.data.bar.position === "top") {
-          var floatExtraV = Settings.data.bar.floating ? Settings.data.bar.marginVertical * Style.marginXL : 0
-          return Style.barHeight + base + floatExtraV
+      function calculateMargin(isAnchored, position) {
+        if (!isAnchored)
+          return 0;
+
+        let base = Style.marginM;
+        if (Settings.data.bar.position === position) {
+          const isVertical = position === "top" || position === "bottom";
+          const floatExtra = Math.ceil(Settings.data.bar.floating ? (isVertical ? Settings.data.bar.marginVertical : Settings.data.bar.marginHorizontal) * Style.marginXL : 0);
+          return Style.barHeight + base + floatExtra;
         }
-        return base
+        return base;
       }
 
-      margins.bottom: {
-        if (!(anchors.bottom))
-          return 0
-        var base = Style.marginM
-        if (Settings.data.bar.position === "bottom") {
-          var floatExtraV = Settings.data.bar.floating ? Settings.data.bar.marginVertical * Style.marginXL : 0
-          return Style.barHeight + base + floatExtraV
-        }
-        return base
-      }
+      margins.top: calculateMargin(anchors.top, "top")
+      margins.bottom: calculateMargin(anchors.bottom, "bottom")
+      margins.left: calculateMargin(anchors.left, "left")
+      margins.right: calculateMargin(anchors.right, "right")
 
-      margins.left: {
-        if (!(anchors.left))
-          return 0
-        var base = Style.marginM
-        if (Settings.data.bar.position === "left") {
-          var floatExtraH = Settings.data.bar.floating ? Settings.data.bar.marginHorizontal * Style.marginXL : 0
-          return Style.barHeight + base + floatExtraH
-        }
-        return base
-      }
-
-      margins.right: {
-        if (!(anchors.right))
-          return 0
-        var base = Style.marginM
-        if (Settings.data.bar.position === "right") {
-          var floatExtraH = Settings.data.bar.floating ? Settings.data.bar.marginHorizontal * Style.marginXL : 0
-          return Style.barHeight + base + floatExtraH
-        }
-        return base
-      }
-
-      implicitWidth: verticalMode ? vWidth : hWidth
-      implicitHeight: verticalMode ? vHeight : hHeight
-
+      implicitWidth: verticalMode ? longVWidth : (isShortMode ? lockKeyHWidth : longHWidth)
+      implicitHeight: verticalMode ? (isShortMode ? lockKeyVHeight : longVHeight) : longHHeight
       color: Color.transparent
 
+      WlrLayershell.namespace: "noctalia-osd-" + (screen?.name || "unknown")
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-      WlrLayershell.layer: (Settings.data.osd && Settings.data.osd.overlayLayer) ? WlrLayer.Overlay : WlrLayer.Top
-      exclusionMode: PanelWindow.ExclusionMode.Ignore
+      WlrLayershell.layer: Settings.data.osd?.overlayLayer ? WlrLayer.Overlay : WlrLayer.Top
+      WlrLayershell.exclusionMode: ExclusionMode.Ignore
 
-      // Rectangle {
-      //   anchors.fill: parent
-      //   color: "#4400FF00"
-      // }
       Item {
         id: osdItem
         anchors.fill: parent
         visible: false
         opacity: 0
-        scale: 0.85 // initial scale for a little zoom effect
+        scale: 0.85
 
         Behavior on opacity {
           NumberAnimation {
-            id: opacityAnimation
             duration: Style.animationNormal
             easing.type: Easing.InOutQuad
           }
@@ -231,7 +455,6 @@ Variants {
 
         Behavior on scale {
           NumberAnimation {
-            id: scaleAnimation
             duration: Style.animationNormal
             easing.type: Easing.InOutQuad
           }
@@ -243,39 +466,43 @@ Variants {
           onTriggered: osdItem.hide()
         }
 
-        // Timer to handle visibility after animations complete
         Timer {
           id: visibilityTimer
-          interval: Style.animationNormal + 50 // Add small buffer
+          interval: Style.animationNormal + 50
           onTriggered: {
-            osdItem.visible = false
-            root.currentOSDType = ""
-            // Deactivate the loader when done
-            root.active = false
+            osdItem.visible = false;
+            root.currentOSDType = -1;
+            root.lastLockKeyChanged = ""; // Reset the lock key change indicator
+            root.active = false;
           }
         }
 
-        // Background rectangle (source for the effect)
         Rectangle {
           id: background
           anchors.fill: parent
           anchors.margins: Style.marginM * 1.5
           radius: Style.radiusL
-          color: Color.mSurface
-          border.color: Color.mOutline
+          color: Qt.alpha(Color.mSurface, Settings.data.osd.backgroundOpacity || 1.0)
+          border.color: Qt.alpha(Color.mOutline, Settings.data.osd.backgroundOpacity || 1.0)
           border.width: {
-            const bw = Math.max(2, Style.borderM)
-            return (bw % 2 === 0) ? bw : bw + 1
+            const bw = Math.max(2, Style.borderM);
+            return bw % 2 === 0 ? bw : bw + 1;
           }
         }
 
-        NDropShadows {
+        NDropShadow {
           anchors.fill: background
           source: background
           autoPaddingEnabled: true
+
+          // Override with hard shadow settings
+          shadowBlur: 0.0  // Sharp shadow
+          shadowOpacity: 0.85
+          shadowColor: Color.mSecondary
+          shadowHorizontalOffset: 3
+          shadowVerticalOffset: 3
         }
 
-        // Content loader on top of the background (not affected by MultiEffect)
         Loader {
           id: contentLoader
           anchors.fill: background
@@ -286,22 +513,74 @@ Variants {
 
         Component {
           id: horizontalContent
-          Item {
+          RowLayout {
             anchors.fill: parent
+            anchors.leftMargin: Style.marginL
+            anchors.rightMargin: Style.marginL
+            spacing: Style.marginM
+            clip: true
 
-            RowLayout {
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.margins: Style.marginL
-              spacing: Style.marginM
+            // TextMetrics to measure the maximum possible percentage width
+            TextMetrics {
+              id: percentageMetrics
+              font.family: Settings.data.ui.fontFixed
+              font.weight: Style.fontWeightMedium
+              font.pointSize: Style.fontSizeS * (Settings.data.ui.fontFixedScale * Style.uiScaleRatio)
+              text: "150%" // Maximum possible value with volumeOverdrive
+            }
 
-              NIcon {
-                icon: root.getIcon()
-                color: root.getIconColor()
-                pointSize: Style.fontSizeXL
-                Layout.alignment: Qt.AlignVCenter
+            // Common Icon for all types
+            NIcon {
+              icon: root.getIcon()
+              color: root.getIconColor()
+              pointSize: Style.fontSizeXL
+              Layout.alignment: Qt.AlignVCenter
 
+              Behavior on color {
+                ColorAnimation {
+                  duration: Style.animationNormal
+                  easing.type: Easing.InOutQuad
+                }
+              }
+            }
+
+            // Lock Key Status Text (replaces progress bar)
+            NText {
+              visible: root.currentOSDType === OSD.Type.LockKey
+              text: root.getDisplayPercentage()
+              color: root.getProgressColor()
+              pointSize: Style.fontSizeM
+              family: Settings.data.ui.fontFixed
+              font.weight: Style.fontWeightMedium
+              elide: Text.ElideNone
+              Layout.fillWidth: true
+              horizontalAlignment: Text.AlignHCenter
+              Layout.alignment: Qt.AlignVCenter
+            }
+
+            // Progress Bar for Volume/Brightness
+            Rectangle {
+              visible: root.currentOSDType !== OSD.Type.LockKey
+              Layout.fillWidth: true
+              Layout.alignment: Qt.AlignVCenter
+              height: panel.barThickness
+              radius: Math.round(panel.barThickness / 2)
+              color: Color.mSurfaceVariant
+
+              Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: parent.width * Math.min(1.0, root.getCurrentValue() / root.getMaxValue())
+                radius: parent.radius
+                color: root.getProgressColor()
+
+                Behavior on width {
+                  NumberAnimation {
+                    duration: Style.animationNormal
+                    easing.type: Easing.InOutQuad
+                  }
+                }
                 Behavior on color {
                   ColorAnimation {
                     duration: Style.animationNormal
@@ -309,24 +588,130 @@ Variants {
                   }
                 }
               }
+            }
 
-              // Progress bar with calculated width
+            // Percentage Text for Volume/Brightness
+            NText {
+              visible: root.currentOSDType !== OSD.Type.LockKey
+              text: root.getDisplayPercentage()
+              color: Color.mOnSurface
+              pointSize: Style.fontSizeS
+              family: Settings.data.ui.fontFixed
+              Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+              horizontalAlignment: Text.AlignRight
+              verticalAlignment: Text.AlignVCenter
+              Layout.fillWidth: false
+              Layout.preferredWidth: Math.ceil(percentageMetrics.width) + Math.round(8 * Style.uiScaleRatio)
+              Layout.maximumWidth: Math.ceil(percentageMetrics.width) + Math.round(8 * Style.uiScaleRatio)
+              Layout.minimumWidth: Math.ceil(percentageMetrics.width)
+            }
+          }
+        }
+
+        Component {
+          id: verticalContent
+          ColumnLayout {
+            anchors.fill: parent
+            anchors.topMargin: Style.marginL
+            anchors.bottomMargin: Style.marginL
+            spacing: root.currentOSDType === OSD.Type.LockKey ? Style.marginM : Style.marginS
+            clip: root.currentOSDType !== OSD.Type.LockKey
+
+            // Vertical text display for Lock Keys
+            ColumnLayout {
+              id: lockKeyVerticalLayout
+              visible: root.currentOSDType === OSD.Type.LockKey
+              Layout.fillWidth: true
+              Layout.fillHeight: false
+              Layout.alignment: Qt.AlignHCenter
+              spacing: 0
+
+              property var lockKeyChars: []
+
+              function updateLockKeyChars() {
+                const text = root.getDisplayPercentage();
+                const chars = [];
+                for (let i = 0; i < text.length; i++) {
+                  chars.push(text[i]);
+                }
+                lockKeyChars = chars;
+              }
+
+              Component.onCompleted: updateLockKeyChars()
+
+              Connections {
+                target: root
+                function onLastLockKeyChangedChanged() {
+                  if (root.currentOSDType === OSD.Type.LockKey) {
+                    lockKeyVerticalLayout.updateLockKeyChars();
+                  }
+                }
+                function onCurrentOSDTypeChanged() {
+                  if (root.currentOSDType === OSD.Type.LockKey) {
+                    lockKeyVerticalLayout.updateLockKeyChars();
+                  }
+                }
+              }
+
+              Repeater {
+                model: lockKeyVerticalLayout.lockKeyChars
+
+                NText {
+                  text: modelData || ""
+                  color: root.getProgressColor()
+                  pointSize: Style.fontSizeM
+                  family: Settings.data.ui.fontFixed
+                  font.weight: Style.fontWeightMedium
+                  Layout.fillWidth: true
+                  Layout.preferredHeight: {
+                    const fontSize = Style.fontSizeM * Settings.data.ui.fontFixedScale * Style.uiScaleRatio;
+                    return Math.round(fontSize * 1.3); // Add 30% for line height
+                  }
+                  Layout.alignment: Qt.AlignHCenter
+                  horizontalAlignment: Text.AlignHCenter
+                  verticalAlignment: Text.AlignVCenter
+                }
+              }
+            }
+
+            // Unified Text display for Percentage (non-lock key)
+            NText {
+              visible: root.currentOSDType !== OSD.Type.LockKey
+              text: root.getDisplayPercentage()
+              color: Color.mOnSurface
+              pointSize: Style.fontSizeS
+              family: Settings.data.ui.fontFixed
+              font.weight: Style.fontWeightRegular
+              Layout.fillWidth: true
+              Layout.alignment: Qt.AlignHCenter
+              horizontalAlignment: Text.AlignHCenter
+              verticalAlignment: Text.AlignVCenter
+              Layout.preferredHeight: Math.round(20 * Style.uiScaleRatio)
+            }
+
+            // Progress Bar for Volume/Brightness
+            Item {
+              visible: root.currentOSDType !== OSD.Type.LockKey
+              Layout.fillWidth: true
+              Layout.fillHeight: root.currentOSDType !== OSD.Type.LockKey
+
               Rectangle {
-                Layout.fillWidth: true
-                height: panel.barThickness
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: panel.barThickness
                 radius: Math.round(panel.barThickness / 2)
                 color: Color.mSurfaceVariant
-                width: parent.width * 0.6
 
                 Rectangle {
                   anchors.left: parent.left
-                  anchors.top: parent.top
+                  anchors.right: parent.right
                   anchors.bottom: parent.bottom
-                  width: parent.width * Math.min(1.0, root.getCurrentValue() / root.getMaxValue())
+                  height: parent.height * Math.min(1.0, root.getCurrentValue() / root.getMaxValue())
                   radius: parent.radius
                   color: root.getProgressColor()
 
-                  Behavior on width {
+                  Behavior on height {
                     NumberAnimation {
                       duration: Style.animationNormal
                       easing.type: Easing.InOutQuad
@@ -340,106 +725,21 @@ Variants {
                   }
                 }
               }
-
-              // Percentage text
-              NText {
-                text: root.getDisplayPercentage()
-                color: Color.mOnSurface
-                pointSize: Style.fontSizeS
-                family: Settings.data.ui.fontFixed
-                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.preferredWidth: Math.round(50 * Style.uiScaleRatio)
-              }
             }
-          }
-        }
 
-        Component {
-          id: verticalContent
-          Item {
-            anchors.fill: parent
+            // Unified Icon display
+            NIcon {
+              icon: root.getIcon()
+              color: root.getIconColor()
+              pointSize: root.currentOSDType === OSD.Type.LockKey ? Style.fontSizeXL : Style.fontSizeL
+              Layout.alignment: root.currentOSDType === OSD.Type.LockKey ? Qt.AlignHCenter : (Qt.AlignHCenter | Qt.AlignBottom)
+              Layout.preferredHeight: root.currentOSDType === OSD.Type.LockKey ? (Style.fontSizeXL * Style.uiScaleRatio * 1.5) : -1
+              Layout.minimumHeight: root.currentOSDType === OSD.Type.LockKey ? (Style.fontSizeXL * Style.uiScaleRatio) : 0
 
-            ColumnLayout {
-              // Ensure inner padding respects the rounded corners; avoid clipping the icon/text
-              property int vMargin: {
-                const styleMargin = Style.marginL
-                const cornerGuard = Math.round(osdItem.radius)
-                return Math.max(styleMargin, cornerGuard)
-              }
-              property int vMarginTop: Math.round(Math.max(osdItem.radius, Style.marginS))
-              property int balanceDelta: Style.marginS
-              anchors.fill: parent
-              anchors.topMargin: vMargin
-              anchors.bottomMargin: vMargin
-              spacing: Style.marginS
-
-              // Percentage text at top
-              Item {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.round(20 * Style.uiScaleRatio)
-                NText {
-                  id: percentText
-                  text: root.getDisplayPercentage()
-                  color: Color.mOnSurface
-                  pointSize: Style.fontSizeS
-                  family: Settings.data.ui.fontFixed
-                  width: Math.round(50 * Style.uiScaleRatio)
-                  height: parent.height
-                  anchors.centerIn: parent
-                  horizontalAlignment: Text.AlignHCenter
-                  verticalAlignment: Text.AlignVCenter
-                }
-              }
-
-              // Progress bar
-              Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true // Fill remaining space between text and icon
-                Rectangle {
-                  anchors.horizontalCenter: parent.horizontalCenter
-                  anchors.top: parent.top
-                  anchors.bottom: parent.bottom
-                  width: panel.barThickness
-                  radius: Math.round(panel.barThickness / 2)
-                  color: Color.mSurfaceVariant
-
-                  Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: parent.height * Math.min(1.0, root.getCurrentValue() / root.getMaxValue())
-                    radius: parent.radius
-                    color: root.getProgressColor()
-
-                    Behavior on height {
-                      NumberAnimation {
-                        duration: Style.animationNormal
-                        easing.type: Easing.InOutQuad
-                      }
-                    }
-                    Behavior on color {
-                      ColorAnimation {
-                        duration: Style.animationNormal
-                        easing.type: Easing.InOutQuad
-                      }
-                    }
-                  }
-                }
-              }
-
-              // Icon at bottom
-              NIcon {
-                icon: root.getIcon()
-                color: root.getIconColor()
-                pointSize: Style.fontSizeL
-                Layout.alignment: Qt.AlignHCenter | Qt.AlignBottom
-                Behavior on color {
-                  ColorAnimation {
-                    duration: Style.animationNormal
-                    easing.type: Easing.InOutQuad
-                  }
+              Behavior on color {
+                ColorAnimation {
+                  duration: Style.animationNormal
+                  easing.type: Easing.InOutQuad
                 }
               }
             }
@@ -447,159 +747,39 @@ Variants {
         }
 
         function show() {
-          // Cancel any pending hide operations
-          hideTimer.stop()
-          visibilityTimer.stop()
+          hideTimer.stop();
+          visibilityTimer.stop();
+          osdItem.visible = true;
 
-          // Make visible and animate in
-          osdItem.visible = true
-          // Use Qt.callLater to ensure the visible change is processed before animation
           Qt.callLater(() => {
-                         osdItem.opacity = 1
-                         osdItem.scale = 1.0
-                       })
+                         osdItem.opacity = 1;
+                         osdItem.scale = 1.0;
+                       });
 
-          // Start the auto-hide timer
-          hideTimer.start()
+          hideTimer.start();
         }
 
         function hide() {
-          hideTimer.stop()
-          visibilityTimer.stop()
-
-          // Start fade out animation
-          osdItem.opacity = 0
-          osdItem.scale = 0.85 // Less dramatic scale change for smoother effect
-
-          // Delay hiding the element until after animation completes
-          visibilityTimer.start()
+          hideTimer.stop();
+          visibilityTimer.stop();
+          osdItem.opacity = 0;
+          osdItem.scale = 0.85;
+          visibilityTimer.start();
         }
 
         function hideImmediately() {
-          hideTimer.stop()
-          visibilityTimer.stop()
-          osdItem.opacity = 0
-          osdItem.scale = 0.85
-          osdItem.visible = false
-          root.currentOSDType = ""
-          root.active = false
+          hideTimer.stop();
+          visibilityTimer.stop();
+          osdItem.opacity = 0;
+          osdItem.scale = 0.85;
+          osdItem.visible = false;
+          root.currentOSDType = -1;
+          root.active = false;
         }
       }
 
       function showOSD() {
-        osdItem.show()
-      }
-    }
-
-    // Volume change monitoring
-    Connections {
-      target: AudioService
-
-      function onVolumeChanged() {
-        if (volumeInitialized) {
-          showOSD("volume")
-        }
-      }
-
-      function onMutedChanged() {
-        if (muteInitialized) {
-          showOSD("volume")
-        }
-      }
-
-      function onInputVolumeChanged() {
-        if (!inputAudioInitialized) {
-          return
-        }
-        showOSD("inputVolume")
-      }
-
-      function onInputMutedChanged() {
-        if (!inputAudioInitialized) {
-          return
-        }
-        showOSD("inputVolume")
-      }
-    }
-
-    // Timer to initialize volume/mute flags after services are ready
-    Timer {
-      id: initTimer
-      interval: 500
-      running: true
-      onTriggered: {
-        volumeInitialized = true
-        muteInitialized = true
-        inputAudioInitialized = true
-        // Brightness initializes on first change to avoid showing OSD on startup
-        connectBrightnessMonitors()
-      }
-    }
-
-    // Brightness change monitoring
-    Connections {
-      target: BrightnessService
-
-      function onMonitorsChanged() {
-        connectBrightnessMonitors()
-      }
-    }
-
-    function disconnectBrightnessMonitors() {
-      for (var i = 0; i < BrightnessService.monitors.length; i++) {
-        let monitor = BrightnessService.monitors[i]
-        monitor.brightnessUpdated.disconnect(onBrightnessChanged)
-      }
-    }
-
-    function connectBrightnessMonitors() {
-      for (var i = 0; i < BrightnessService.monitors.length; i++) {
-        let monitor = BrightnessService.monitors[i]
-        // Disconnect first to avoid duplicate connections
-        monitor.brightnessUpdated.disconnect(onBrightnessChanged)
-        monitor.brightnessUpdated.connect(onBrightnessChanged)
-      }
-    }
-
-    function onBrightnessChanged(newBrightness) {
-      root.lastUpdatedBrightness = newBrightness
-
-      if (!brightnessInitialized) {
-        brightnessInitialized = true
-        return
-      }
-
-      showOSD("brightness")
-    }
-
-    function showOSD(type) {
-      // Update the current OSD type
-      currentOSDType = type
-
-      // Activate the loader if not already active
-      if (!root.active) {
-        root.active = true
-      }
-
-      // Show the OSD (may need to wait for loader to create the item)
-      if (root.item) {
-        root.item.showOSD()
-      } else {
-        // If item not ready yet, wait for it
-        Qt.callLater(() => {
-                       if (root.item) {
-                         root.item.showOSD()
-                       }
-                     })
-      }
-    }
-
-    function hideOSD() {
-      if (root.item && root.item.osdItem) {
-        root.item.osdItem.hideImmediately()
-      } else if (root.active) {
-        // If loader is active but item isn't ready, just deactivate
-        root.active = false
+        osdItem.show();
       }
     }
   }

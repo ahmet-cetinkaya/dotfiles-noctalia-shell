@@ -7,6 +7,7 @@ import qs.Widgets
 
 ColumnLayout {
   id: root
+  spacing: Style.marginL
 
   NToggle {
     label: I18n.tr("settings.lock-screen.lock-on-suspend.label")
@@ -20,6 +21,21 @@ ColumnLayout {
     description: I18n.tr("settings.lock-screen.compact-lockscreen.description")
     checked: Settings.data.general.compactLockScreen
     onToggled: checked => Settings.data.general.compactLockScreen = checked
+  }
+
+  NToggle {
+    label: I18n.tr("settings.lock-screen.show-session-buttons.label")
+    description: I18n.tr("settings.lock-screen.show-session-buttons.description")
+    checked: Settings.data.general.showSessionButtonsOnLockScreen
+    onToggled: checked => Settings.data.general.showSessionButtonsOnLockScreen = checked
+  }
+
+  NToggle {
+    label: I18n.tr("settings.lock-screen.show-hibernate.label")
+    description: I18n.tr("settings.lock-screen.show-hibernate.description")
+    checked: Settings.data.general.showHibernateOnLockScreen
+    onToggled: checked => Settings.data.general.showHibernateOnLockScreen = checked
+    visible: Settings.data.general.showSessionButtonsOnLockScreen
   }
 
   NDivider {

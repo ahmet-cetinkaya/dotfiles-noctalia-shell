@@ -3,17 +3,16 @@ import QtQuick.Shapes
 import qs.Commons
 import qs.Widgets
 
-
 /**
- * AllBackgrounds - Unified Shape container for all bar and panel backgrounds
- *
- * Unified shadow system. This component contains a single Shape
- * with multiple ShapePath children (one for bar, one for each panel type).
- *
- * Benefits:
- * - Single GPU-accelerated rendering pass for all backgrounds
- * - Unified shadow system (one MultiEffect for everything)
- */
+* AllBackgrounds - Unified Shape container for all bar and panel backgrounds
+*
+* Unified shadow system. This component contains a single Shape
+* with multiple ShapePath children (one for bar, one for each panel type).
+*
+* Benefits:
+* - Single GPU-accelerated rendering pass for all backgrounds
+* - Unified shadow system (one MultiEffect for everything)
+*/
 Item {
   id: root
 
@@ -22,6 +21,8 @@ Item {
 
   // Reference to MainScreen (for panel access)
   required property var windowRoot
+
+  readonly property color panelBackgroundColor: Qt.alpha(Color.mSurface, Settings.data.ui.panelBackgroundOpacity)
 
   anchors.fill: parent
 
@@ -44,15 +45,12 @@ Item {
       enabled: false // Disable mouse input on the Shape itself
 
       Component.onCompleted: {
-        Logger.d("AllBackgrounds", "AllBackgrounds initialized")
-        Logger.d("AllBackgrounds", "  bar:", root.bar)
-        Logger.d("AllBackgrounds", "  windowRoot:", root.windowRoot)
+        Logger.d("AllBackgrounds", "AllBackgrounds initialized");
       }
 
-
       /**
-     *  Bar
-     */
+      *  Bar
+      */
       BarBackground {
         bar: root.bar
         shapeContainer: backgroundsShape
@@ -60,114 +58,142 @@ Item {
         backgroundColor: Qt.alpha(Color.mSurface, Settings.data.bar.backgroundOpacity)
       }
 
-
       /**
-     *  Panels
-     */
+      *  Panels
+      */
 
       // Audio
       PanelBackground {
-        panel: root.windowRoot.audioPanel
+        panel: root.windowRoot.audioPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
       // Battery
       PanelBackground {
-        panel: root.windowRoot.batteryPanel
+        panel: root.windowRoot.batteryPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
       // Bluetooth
       PanelBackground {
-        panel: root.windowRoot.bluetoothPanel
+        panel: root.windowRoot.bluetoothPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
-      // Calendar
+      // Brightness
       PanelBackground {
-        panel: root.windowRoot.calendarPanel
+        panel: root.windowRoot.brightnessPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
+      }
+
+      // Clock
+      PanelBackground {
+        panel: root.windowRoot.clockPanelPlaceholder
+        shapeContainer: backgroundsShape
+        backgroundColor: panelBackgroundColor
       }
 
       // Control Center
       PanelBackground {
-        panel: root.windowRoot.controlCenterPanel
+        panel: root.windowRoot.controlCenterPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
+      }
+
+      // Changelog
+      PanelBackground {
+        panel: root.windowRoot.changelogPanelPlaceholder
+        shapeContainer: backgroundsShape
+        backgroundColor: panelBackgroundColor
       }
 
       // Launcher
       PanelBackground {
-        panel: root.windowRoot.launcherPanel
+        panel: root.windowRoot.launcherPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Qt.alpha(Color.mSurface, Settings.data.appLauncher.backgroundOpacity)
+        backgroundColor: panelBackgroundColor
       }
 
       // Notification History
       PanelBackground {
-        panel: root.windowRoot.notificationHistoryPanel
+        panel: root.windowRoot.notificationHistoryPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
       // Session Menu
       PanelBackground {
-        panel: root.windowRoot.sessionMenuPanel
+        panel: root.windowRoot.sessionMenuPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
       // Settings
       PanelBackground {
-        panel: root.windowRoot.settingsPanel
+        panel: root.windowRoot.settingsPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
       // Setup Wizard
       PanelBackground {
-        panel: root.windowRoot.setupWizardPanel
+        panel: root.windowRoot.setupWizardPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
       // TrayDrawer
       PanelBackground {
-        panel: root.windowRoot.trayDrawerPanel
+        panel: root.windowRoot.trayDrawerPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
-      }
-
-      // TrayMenu
-      PanelBackground {
-        panel: root.windowRoot.trayMenuPanel
-        shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
       // Wallpaper
       PanelBackground {
-        panel: root.windowRoot.wallpaperPanel
+        panel: root.windowRoot.wallpaperPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
       }
 
       // WiFi
       PanelBackground {
-        panel: root.windowRoot.wifiPanel
+        panel: root.windowRoot.wifiPanelPlaceholder
         shapeContainer: backgroundsShape
-        backgroundColor: Color.mSurface
+        backgroundColor: panelBackgroundColor
+      }
+
+      // Plugin Panel Slot 1
+      PanelBackground {
+        panel: root.windowRoot.pluginPanel1Placeholder
+        shapeContainer: backgroundsShape
+        backgroundColor: panelBackgroundColor
+      }
+
+      // Plugin Panel Slot 2
+      PanelBackground {
+        panel: root.windowRoot.pluginPanel2Placeholder
+        shapeContainer: backgroundsShape
+        backgroundColor: panelBackgroundColor
       }
     }
 
     // Apply shadow to the cached layer
-    NDropShadows {
+    NDropShadow {
       anchors.fill: parent
       source: backgroundsShape
+      autoPaddingEnabled: true
+
+      // Override with hard shadow settings
+      shadowBlur: 0.0  // Sharp shadow
+      shadowOpacity: 0.85
+      shadowColor: Color.mSecondary
+      shadowHorizontalOffset: 3
+      shadowVerticalOffset: 3
     }
   }
 }

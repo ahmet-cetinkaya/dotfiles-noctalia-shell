@@ -1,6 +1,6 @@
 import QtQuick
-import Quickshell
 import QtQuick.Effects
+import Quickshell
 import Quickshell.Wayland
 import qs.Commons
 import qs.Services.Compositor
@@ -17,20 +17,19 @@ Loader {
 
       required property ShellScreen modelData
       property string wallpaper: ""
-      property bool overviewIsSeen: false
 
       Component.onCompleted: {
         if (modelData) {
-          Logger.d("Overview", "Loading overview for Niri on", modelData.name)
+          Logger.d("Overview", "Loading overview for Niri on", modelData.name);
         }
-        setWallpaperInitial()
+        setWallpaperInitial();
       }
 
       Component.onDestruction: {
         // Clean up resources to prevent memory leak when overviewEnabled is toggled off
-        timerDisableFx.stop()
-        bgImage.layer.enabled = false
-        bgImage.source = ""
+        timerDisableFx.stop();
+        bgImage.layer.enabled = false;
+        bgImage.source = "";
       }
 
       // External state management
@@ -38,40 +37,19 @@ Loader {
         target: WallpaperService
         function onWallpaperChanged(screenName, path) {
           if (screenName === modelData.name) {
-            wallpaper = path
+            wallpaper = path;
           }
-        }
-      }
-
-      Connections {
-        target: CompositorService.backend
-        function onOverviewActiveChanged() {
-          if (CompositorService.backend.overviewActive) {
-            overviewIsSeen = true
-            timerDisableFx.stop()
-          } else {
-            timerDisableFx.restart()
-          }
-        }
-      }
-
-      // Use to disable effects when overview is no longer necessary.
-      Timer {
-        id: timerDisableFx
-        interval: 2000
-        onTriggered: {
-          overviewIsSeen = false
         }
       }
 
       function setWallpaperInitial() {
         if (!WallpaperService || !WallpaperService.isInitialized) {
-          Qt.callLater(setWallpaperInitial)
-          return
+          Qt.callLater(setWallpaperInitial);
+          return;
         }
-        const wallpaperPath = WallpaperService.getWallpaper(modelData.name)
+        const wallpaperPath = WallpaperService.getWallpaper(modelData.name);
         if (wallpaperPath && wallpaperPath !== wallpaper) {
-          wallpaper = wallpaperPath
+          wallpaper = wallpaperPath;
         }
       }
 
@@ -93,16 +71,15 @@ Loader {
         anchors.fill: parent
         fillMode: Image.PreserveAspectCrop
         source: wallpaper
-        smooth: false
+        smooth: true
         mipmap: false
         cache: false
         asynchronous: true
-        visible: overviewIsSeen
 
         // Image is heavily blurred, so use low resolution to save memory
         sourceSize: Qt.size(1280, 720)
 
-        layer.enabled: overviewIsSeen
+        layer.enabled: true
         layer.smooth: false
         layer.effect: MultiEffect {
           blurEnabled: true
