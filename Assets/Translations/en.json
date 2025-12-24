@@ -372,9 +372,7 @@
         "show-labels-only-when-occupied": {
           "description": "Only show workspace label for workspaces that have open windows.",
           "label": "Show label only when occupied"
-        }
-      },
-      "taskbar-grouped": {
+        },
         "show-workspace-numbers": {
           "label": "Show workspace numbers",
           "description": "Display workspace numbers in the top-left corner of task groups."
