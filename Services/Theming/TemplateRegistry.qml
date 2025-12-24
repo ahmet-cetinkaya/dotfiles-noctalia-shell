@@ -107,7 +107,7 @@ Singleton {
       "input": "vicinae.toml",
       "outputs": [
         {
-          "path": "~/.local/share/vicinae/themes/matugen.toml"
+          "path": "~/.local/share/vicinae/themes/noctalia.toml"
         }
       ],
       "postProcess": () => `cp --update=none ${Quickshell.shellDir}/Assets/noctalia.svg ~/.local/share/vicinae/themes/noctalia.svg && ${colorsApplyScript} vicinae`
@@ -165,6 +165,11 @@ Singleton {
           "requiresThemesFolder": false
         },
         {
+          "name": "equicord",
+          "path": "~/.config/Equicord",
+          "requiresThemesFolder": false
+        },
+        {
           "name": "lightcord",
           "path": "~/.config/lightcord",
           "requiresThemesFolder": false
@@ -189,11 +194,34 @@ Singleton {
       "clients": [
         {
           "name": "code",
-          "path": "~/.vscode/extensions/undefined_publisher.noctaliatheme-0.0.1/themes/NoctaliaTheme-color-theme.json"
+          "path": "~/.vscode/extensions/noctalia.noctaliatheme-0.0.5/themes/NoctaliaTheme-color-theme.json"
         },
         {
           "name": "codium",
-          "path": "~/.vscode-oss/extensions/undefined_publisher.noctaliatheme-0.0.1/themes/NoctaliaTheme-color-theme.json"
+          "path": "~/.vscode-oss/extensions/noctalia.noctaliatheme-0.0.5/themes/NoctaliaTheme-color-theme.json"
+        }
+      ]
+    },
+    {
+      "id": "zed",
+      "name": "Zed",
+      "category": "applications",
+      "input": "zed.json",
+      "outputs": [
+        {
+          "path": "~/.config/zed/themes/noctalia.json"
+        }
+      ],
+      "dualMode": true // Template contains both dark and light theme patterns
+    },
+    {
+      "id": "helix",
+      "name": "Helix",
+      "category": "applications",
+      "input": "helix.toml",
+      "outputs": [
+        {
+          "path": "~/.config/helix/themes/noctalia.toml"
         }
       ]
     },
@@ -233,6 +261,17 @@ Singleton {
       "postProcess": () => `${colorsApplyScript} cava`
     },
     {
+      "id": "yazi",
+      "name": "Yazi",
+      "category": "applications",
+      "input": "yazi.toml",
+      "outputs": [
+        {
+          "path": "~/.config/yazi/flavors/noctalia.yazi/flavor.toml"
+        }
+      ]
+    },
+    {
       "id": "emacs",
       "name": "Emacs",
       "category": "applications",
@@ -258,6 +297,30 @@ Singleton {
         }
       ],
       "postProcess": () => `${colorsApplyScript} niri`
+    },
+    {
+      "id": "hyprland",
+      "name": "Hyprland",
+      "category": "compositors",
+      "input": "hyprland.conf",
+      "outputs": [
+        {
+          "path": "~/.config/hypr/noctalia/noctalia-colors.conf"
+        }
+      ],
+      "postProcess": () => `${colorsApplyScript} hyprland`
+    },
+    {
+      "id": "mango",
+      "name": "Mango",
+      "category": "compositors",
+      "input": "mango.conf",
+      "outputs": [
+        {
+          "path": "~/.config/mango/noctalia.conf"
+        }
+      ],
+      "postProcess": () => `${colorsApplyScript} mango`
     }
   ]
 

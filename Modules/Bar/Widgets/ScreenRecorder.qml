@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.Commons
+import qs.Modules.Panels.Settings
 import qs.Services.Media
 import qs.Services.System
 import qs.Services.UI
@@ -23,6 +24,8 @@ NIconButton {
   colorFg: ScreenRecorderService.isRecording ? Color.mOnPrimary : Color.mOnSurface
   colorBorder: Color.transparent
   colorBorderHover: Color.transparent
+  border.color: Style.capsuleBorderColor
+  border.width: Style.capsuleBorderWidth
 
   function handleClick() {
     if (!ScreenRecorderService.isAvailable) {
@@ -33,6 +36,12 @@ NIconButton {
   }
 
   onClicked: handleClick()
+
+  onRightClicked: {
+    var settingsPanel = PanelService.getPanel("settingsPanel", screen);
+    settingsPanel.requestedTab = SettingsPanel.Tab.ScreenRecorder;
+    settingsPanel.open();
+  }
 
   // Custom spinner shown only during pending start
   NIcon {

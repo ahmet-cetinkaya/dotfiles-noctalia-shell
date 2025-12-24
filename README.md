@@ -1,6 +1,6 @@
 # Ahmet Çetinkaya's Noctalia Shell Fork
 
-**This is Ahmet Çetinkaya's personal fork** of the Noctalia shell, featuring extensive customizations and contributions to enhance the desktop experience. You can jump to the original README _[from here](https://github.com/ahmet-cetinkaya/dotfiles-noctalia-shell/tree/main?tab=readme-ov-file#noctalia-shell)_.
+**This is Ahmet Çetinkaya's personal fork** of the Noctalia shell, featuring extensive customizations and contributions to enhance the desktop experience. You can jump to the original README _[from here](#noctalia-shell)_.
 
 ### 🎨 Custom Features
 
@@ -60,7 +60,11 @@
 
 <p align="center">
   <a href="https://docs.noctalia.dev/getting-started/installation">
-    <img src="https://img.shields.io/badge/⚡_QUICK_INSTALL-Get_Started_Now-A8AEFF?style=for-the-badge&logoColor=FFFFFF&labelColor=0C0D11" alt="Quick Install" style="height: 50px" />
+    <img
+      src="https://img.shields.io/badge/🌙_Install_Noctalia-A8AEFF?style=for-the-badge&labelColor=0C0D11"
+      alt="Install Noctalia"
+      style="height: 50px"
+    />
   </a>
 </p>
 
@@ -86,13 +90,11 @@
 A beautiful, minimal desktop shell for Wayland that actually gets out of your way. Built on Quickshell with a warm lavender aesthetic that you can easily customize to match your vibe.
 
 **✨ Key Features:**
-
-- 🪟 Native support for Niri, Hyprland, Sway and MangoWC
+- 🪟 Native support for Niri, Hyprland, Sway, MangoWC and labwc
 - ⚡ Built on Quickshell for performance
 - 🎯 Minimalist design philosophy
 - 🔧 Easily customizable to match your style
 - 🎨 Many color schemes available
-
 ---
 
 ## Preview
@@ -116,7 +118,7 @@ https://github.com/user-attachments/assets/bf46f233-8d66-439a-a1ae-ab0446270f2d
 
 ## 📋 Requirements
 
-- Wayland compositor (Niri, Hyprland, Sway or MangoWC recommended)
+- Wayland compositor (Niri, Hyprland, Sway, MangoWC or labwc recommended)
 - Quickshell
 - Additional dependencies are listed in our [documentation](https://docs.noctalia.dev)
 
@@ -152,7 +154,6 @@ Noctalia provides native support for **Niri**, **Hyprland** and **Sway**. Other 
 We welcome contributions of any size - bug fixes, new features, documentation improvements, or custom themes and configs.
 
 **Get involved:**
-
 - **Found a bug?** [Open an issue](https://github.com/noctalia-dev/noctalia-shell/issues/new)
 - **Want to code?** Check out our [development guidelines](https://docs.noctalia.dev/development/guideline)
 - **Need help?** Join our [Discord](https://discord.noctalia.dev)
@@ -178,18 +179,19 @@ While all donations are greatly appreciated, they are completely voluntary.
 </a>
 
 ### Thank you to everyone who supports the project 💜!
-
-- Gohma
-- DiscoCevapi
-- <a href="https://pika-os.com/" target="_blank">PikaOS</a>
-- LionHeartP
-- Nyxion ツ
-- RockDuck
-- MrDowntempo
-- Tempus Thales
-- Raine
-- JustCurtis
-- llego
+* Gohma
+* DiscoCevapi
+* <a href="https://pika-os.com/" target="_blank">PikaOS</a>
+* LionHeartP
+* Nyxion ツ
+* RockDuck
+* Eynix
+* MrDowntempo
+* Tempus Thales
+* Raine
+* JustCurtis
+* llego
+* Grune
 
 ---
 

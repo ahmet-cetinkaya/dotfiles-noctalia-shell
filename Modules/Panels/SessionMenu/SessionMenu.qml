@@ -15,8 +15,17 @@ import qs.Widgets
 SmartPanel {
   id: root
 
-  preferredWidth: Math.round(420 * Style.uiScaleRatio)
+  readonly property bool largeButtonsStyle: Settings.data.sessionMenu.largeButtonsStyle || false
+
+  // Make panel background transparent for large buttons style
+  panelBackgroundColor: largeButtonsStyle ? Color.transparent : Color.mSurface
+
+  preferredWidth: largeButtonsStyle ? 0 : Math.round(440 * Style.uiScaleRatio)
+  preferredWidthRatio: largeButtonsStyle ? 1.0 : 0
   preferredHeight: {
+    if (largeButtonsStyle) {
+      return 0; // Use ratio instead
+    }
     var headerHeight = Settings.data.sessionMenu.showHeader ? Style.baseWidgetSize * 0.6 : 0;
 
     var dividerHeight = Settings.data.sessionMenu.showHeader ? Style.marginS : 0;
@@ -30,16 +39,17 @@ SmartPanel {
 
     return Math.round(baseHeight + buttonsHeight);
   }
+  preferredHeightRatio: largeButtonsStyle ? 1.0 : 0
 
-  // Positioning
+  // Positioning - large buttons style is always centered and fullscreen
   readonly property string panelPosition: Settings.data.sessionMenu.position
 
-  panelAnchorHorizontalCenter: panelPosition === "center" || panelPosition.endsWith("_center")
-  panelAnchorVerticalCenter: panelPosition === "center"
-  panelAnchorLeft: panelPosition !== "center" && panelPosition.endsWith("_left")
-  panelAnchorRight: panelPosition !== "center" && panelPosition.endsWith("_right")
-  panelAnchorBottom: panelPosition.startsWith("bottom_")
-  panelAnchorTop: panelPosition.startsWith("top_")
+  panelAnchorHorizontalCenter: largeButtonsStyle || panelPosition === "center" || panelPosition.endsWith("_center")
+  panelAnchorVerticalCenter: largeButtonsStyle || panelPosition === "center"
+  panelAnchorLeft: !largeButtonsStyle && panelPosition !== "center" && panelPosition.endsWith("_left")
+  panelAnchorRight: !largeButtonsStyle && panelPosition !== "center" && panelPosition.endsWith("_right")
+  panelAnchorBottom: !largeButtonsStyle && panelPosition.startsWith("bottom_")
+  panelAnchorTop: !largeButtonsStyle && panelPosition.startsWith("top_")
 
   // SessionMenu handle it's own closing logic
   property bool closeWithEscape: false
@@ -270,6 +280,54 @@ SmartPanel {
     }
   }
 
+  function getGridInfo() {
+    const columns = Math.min(3, Math.ceil(Math.sqrt(powerOptions.length)));
+    const rows = Math.ceil(powerOptions.length / columns);
+    return {
+      columns,
+      rows,
+      currentRow: Math.floor(selectedIndex / columns),
+      currentCol: selectedIndex % columns,
+      itemsInRow: row => Math.min(columns, powerOptions.length - row * columns)
+    };
+  }
+
+  // Unified navigation function
+  function navigateGrid(direction) {
+    if (powerOptions.length === 0)
+      return;
+
+    const grid = getGridInfo();
+    let newRow = grid.currentRow;
+    let newCol = grid.currentCol;
+
+    switch (direction) {
+    case "left":
+      newCol = newCol - 1 < 0 ? grid.itemsInRow(newRow) - 1 : newCol - 1;
+      break;
+    case "right":
+      newCol = newCol + 1 >= grid.itemsInRow(newRow) ? 0 : newCol + 1;
+      break;
+    case "up":
+      newRow = newRow - 1 < 0 ? grid.rows - 1 : newRow - 1;
+      break;
+    case "down":
+      newRow = newRow + 1 >= grid.rows ? 0 : newRow + 1;
+      break;
+    }
+
+    // For vertical movement, clamp column if row has fewer items
+    if (direction === "up" || direction === "down") {
+      const itemsInNewRow = grid.itemsInRow(newRow);
+      newCol = Math.min(newCol, itemsInNewRow - 1);
+    }
+
+    const newIndex = newRow * grid.columns + newCol;
+    if (newIndex < powerOptions.length) {
+      selectedIndex = newIndex;
+    }
+  }
+
   function activate() {
     if (powerOptions.length > 0 && powerOptions[selectedIndex]) {
       const option = powerOptions[selectedIndex];
@@ -294,12 +352,36 @@ SmartPanel {
     selectPreviousWrapped();
   }
 
+  function onLeftPressed() {
+    if (largeButtonsStyle) {
+      navigateGrid("left");
+    } else {
+      selectPreviousWrapped();
+    }
+  }
+
+  function onRightPressed() {
+    if (largeButtonsStyle) {
+      navigateGrid("right");
+    } else {
+      selectNextWrapped();
+    }
+  }
+
   function onUpPressed() {
-    selectPreviousWrapped();
+    if (largeButtonsStyle) {
+      navigateGrid("up");
+    } else {
+      selectPreviousWrapped();
+    }
   }
 
   function onDownPressed() {
-    selectNextWrapped();
+    if (largeButtonsStyle) {
+      navigateGrid("down");
+    } else {
+      selectNextWrapped();
+    }
   }
 
   function onReturnPressed() {
@@ -322,6 +404,16 @@ SmartPanel {
     selectPreviousWrapped();
   }
 
+  function onNumberPressed(number) {
+    // Number is 1-based, convert to 0-based index
+    const index = number - 1;
+    if (index >= 0 && index < powerOptions.length) {
+      const option = powerOptions[index];
+      selectedIndex = index;
+      startTimer(option.action);
+    }
+  }
+
   // Countdown timer
   Timer {
     id: countdownTimer
@@ -338,6 +430,21 @@ SmartPanel {
   panelContent: Rectangle {
     id: ui
     color: Color.transparent
+    focus: true
+
+    // For large buttons style, use full screen dimensions
+    readonly property var contentPreferredWidth: largeButtonsStyle ? (root.screen?.width || root.width || 0) : undefined
+    readonly property var contentPreferredHeight: largeButtonsStyle ? (root.screen?.height || root.height || 0) : undefined
+
+    // Focus management
+    Connections {
+      target: root
+      function onOpened() {
+        Qt.callLater(() => {
+                       ui.forceActiveFocus();
+                     });
+      }
+    }
 
     // Navigation functions
     function selectFirst() {
@@ -360,7 +467,73 @@ SmartPanel {
       root.activate();
     }
 
+    // Timer text for large buttons style (above buttons) - positioned absolutely with background
+    Rectangle {
+      id: timerTextContainer
+      visible: largeButtonsStyle && timerActive
+      anchors.bottom: largeButtonsContainer.top
+      anchors.horizontalCenter: largeButtonsContainer.horizontalCenter
+      anchors.bottomMargin: Style.marginM
+      width: timerText.width + Style.marginXL * 2
+      height: timerText.height + Style.marginL * 2
+      radius: Style.radiusM
+      color: Qt.alpha(Color.mSurface, Settings.data.ui.panelBackgroundOpacity)
+      border.color: Color.mOutline
+      border.width: Style.borderS
+      z: 1000
+
+      NText {
+        id: timerText
+        anchors.centerIn: parent
+        text: I18n.tr("session-menu.action-in-seconds", {
+                        "action": I18n.tr("session-menu." + pendingAction),
+                        "seconds": Math.ceil(timeRemaining / 1000)
+                      })
+        font.weight: Style.fontWeightBold
+        pointSize: Style.fontSizeL
+        color: Color.mOnSurface
+      }
+    }
+
+    // Large buttons style layout container
+    ColumnLayout {
+      id: largeButtonsContainer
+      visible: largeButtonsStyle
+      anchors.centerIn: parent
+
+      // Large buttons style layout (grid)
+      GridLayout {
+        id: largeButtonsGrid
+        Layout.alignment: Qt.AlignHCenter
+        columns: Math.min(3, Math.ceil(Math.sqrt(powerOptions.length)))
+        rowSpacing: Style.marginXL
+        columnSpacing: Style.marginXL
+        width: columns * 200 * Style.uiScaleRatio + (columns - 1) * Style.marginXL
+        height: Math.ceil(powerOptions.length / columns) * 200 * Style.uiScaleRatio + (Math.ceil(powerOptions.length / columns) - 1) * Style.marginXL
+
+        Repeater {
+          model: powerOptions
+          delegate: LargeButton {
+            Layout.preferredWidth: 200 * Style.uiScaleRatio
+            Layout.preferredHeight: 200 * Style.uiScaleRatio
+            icon: modelData.icon
+            title: modelData.title
+            isShutdown: modelData.isShutdown || false
+            isSelected: index === selectedIndex
+            number: index + 1
+            onClicked: {
+              selectedIndex = index;
+              startTimer(modelData.action);
+            }
+            pending: timerActive && pendingAction === modelData.action
+          }
+        }
+      }
+    }
+
+    // Normal style layout
     NBox {
+      visible: !largeButtonsStyle
       anchors.fill: parent
       anchors.margins: Style.marginL
 
@@ -427,6 +600,7 @@ SmartPanel {
               title: modelData.title
               isShutdown: modelData.isShutdown || false
               isSelected: index === selectedIndex
+              number: index + 1
               onClicked: {
                 selectedIndex = index;
                 startTimer(modelData.action);
@@ -436,6 +610,24 @@ SmartPanel {
           }
         }
       }
+    }
+
+    // Background MouseArea for large buttons style - closes panel when clicking outside buttons
+    MouseArea {
+      visible: largeButtonsStyle
+      anchors.fill: parent
+      z: -1
+      acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+      onClicked: mouse => {
+                   // Only close if not clicking on a button
+                   // The buttons are above this MouseArea, so clicks on them won't reach here
+                   if (timerActive) {
+                     // Cancel countdown if active
+                     cancelTimer();
+                   } else {
+                     root.close();
+                   }
+                 }
     }
   }
 
@@ -448,6 +640,7 @@ SmartPanel {
     property bool pending: false
     property bool isShutdown: false
     property bool isSelected: false
+    property int number: 0
 
     signal clicked
 
@@ -508,10 +701,10 @@ SmartPanel {
       // Text content in the middle
       ColumnLayout {
         anchors.left: iconElement.right
-        anchors.right: pendingIndicator.visible ? pendingIndicator.left : parent.right
+        anchors.right: numberIndicator.visible ? numberIndicator.left : parent.right
         anchors.verticalCenter: parent.verticalCenter
         anchors.leftMargin: Style.marginL
-        anchors.rightMargin: pendingIndicator.visible ? Style.marginM : 0
+        anchors.rightMargin: numberIndicator.visible ? Style.marginM : 0
         spacing: 0
 
         NText {
@@ -537,23 +730,36 @@ SmartPanel {
         }
       }
 
-      // Pending indicator on the right
+      // Number indicator on the right (when not pending)
       Rectangle {
-        id: pendingIndicator
+        id: numberIndicator
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        width: 20
-        height: 20
-        radius: Math.min(Style.radiusL, width / 2)
-        color: Color.mPrimary
-        visible: buttonRoot.pending
+        width: Style.marginM * 2
+        height: width
+        radius: Math.min(Style.radiusM, height / 2)
+        color: Qt.alpha(Color.mSurfaceVariant, 0.5)
+        border.width: Style.borderS
+        border.color: Color.mOutline
+        visible: buttonRoot.number > 0 && !buttonRoot.pending
 
         NText {
+          id: numberText
           anchors.centerIn: parent
-          text: Math.ceil(timeRemaining / 1000)
+          text: buttonRoot.number
           pointSize: Style.fontSizeS
-          font.weight: Style.fontWeightBold
-          color: Color.mOnPrimary
+          color: {
+            if (buttonRoot.isSelected || mouseArea.containsMouse)
+              return Color.mOnHover;
+            return Color.mOnSurface;
+          }
+
+          Behavior on color {
+            ColorAnimation {
+              duration: Style.animationFast
+              easing.type: Easing.OutCirc
+            }
+          }
         }
       }
     }
@@ -565,6 +771,184 @@ SmartPanel {
       cursorShape: Qt.PointingHandCursor
 
       onClicked: buttonRoot.clicked()
+    }
+  }
+
+  // Large buttons style button component
+  component LargeButton: Rectangle {
+    id: largeButtonRoot
+
+    property string icon: ""
+    property string title: ""
+    property bool pending: false
+    property bool isShutdown: false
+    property bool isSelected: false
+    property int number: 0
+
+    signal clicked
+
+    property real hoverScale: (isSelected || mouseArea.containsMouse) ? 1.05 : 1.0
+
+    radius: Style.radiusL
+    color: {
+      if (pending) {
+        return Qt.alpha(Color.mPrimary, 1.0);
+      }
+      if (isSelected || mouseArea.containsMouse) {
+        return Qt.alpha(Color.mPrimary, 1.0);
+      }
+      return Qt.alpha(Color.mSurfaceVariant, Settings.data.ui.panelBackgroundOpacity);
+    }
+
+    border.width: Style.borderS
+    border.color: Color.mOutline
+
+    // Scale transform for hover effect
+    transform: Scale {
+      origin.x: largeButtonRoot.width / 2
+      origin.y: largeButtonRoot.height / 2
+      xScale: hoverScale
+      yScale: hoverScale
+    }
+
+    Behavior on color {
+      ColorAnimation {
+        duration: Style.animationFast
+        easing.type: Easing.OutCirc
+      }
+    }
+
+    Behavior on border.width {
+      NumberAnimation {
+        duration: Style.animationFast
+        easing.type: Easing.OutCirc
+      }
+    }
+
+    Behavior on hoverScale {
+      NumberAnimation {
+        duration: Style.animationNormal
+        easing.type: Easing.OutBack
+        easing.overshoot: 0.5
+      }
+    }
+
+    ColumnLayout {
+      anchors.centerIn: parent
+      anchors.margins: Style.marginL
+      spacing: Style.marginM
+
+      // Large icon with scale animation
+      NIcon {
+        id: iconElement
+        Layout.alignment: Qt.AlignHCenter
+        icon: largeButtonRoot.icon
+        color: {
+          if (largeButtonRoot.pending)
+            return Color.mOnPrimary;
+          if (largeButtonRoot.isShutdown && !largeButtonRoot.isSelected && !mouseArea.containsMouse)
+            return Color.mError;
+          if (largeButtonRoot.isSelected || mouseArea.containsMouse)
+            return Color.mOnPrimary;
+          return Color.mOnSurface;
+        }
+        pointSize: Style.fontSizeXXXL * 2
+        width: 80 * Style.uiScaleRatio
+        height: 80 * Style.uiScaleRatio
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+
+        property real iconScale: (largeButtonRoot.isSelected || mouseArea.containsMouse) ? 1.1 : 1.0
+
+        transform: Scale {
+          origin.x: iconElement.width / 2
+          origin.y: iconElement.height / 2
+          xScale: iconElement.iconScale
+          yScale: iconElement.iconScale
+        }
+
+        Behavior on color {
+          ColorAnimation {
+            duration: Style.animationFast
+            easing.type: Easing.OutCirc
+          }
+        }
+
+        Behavior on iconScale {
+          NumberAnimation {
+            duration: Style.animationNormal
+            easing.type: Easing.OutBack
+            easing.overshoot: 0.6
+          }
+        }
+      }
+
+      // Title text
+      NText {
+        Layout.alignment: Qt.AlignHCenter
+        text: largeButtonRoot.title
+        font.weight: Style.fontWeightMedium
+        pointSize: Style.fontSizeL
+        color: {
+          if (largeButtonRoot.pending)
+            return Color.mOnPrimary;
+          if (largeButtonRoot.isShutdown && !largeButtonRoot.isSelected && !mouseArea.containsMouse)
+            return Color.mError;
+          if (largeButtonRoot.isSelected || mouseArea.containsMouse)
+            return Color.mOnPrimary;
+          return Color.mOnSurface;
+        }
+
+        Behavior on color {
+          ColorAnimation {
+            duration: Style.animationFast
+            easing.type: Easing.OutCirc
+          }
+        }
+      }
+    }
+
+    // Number indicator in top-right corner
+    Rectangle {
+      anchors.top: parent.top
+      anchors.right: parent.right
+      anchors.margins: Style.marginM
+      width: Style.fontSizeM * 2
+      height: width
+      radius: Math.min(Style.radiusM, height / 2)
+      color: Qt.alpha(Color.mSurfaceVariant, 0.7)
+      border.width: Style.borderS
+      border.color: Color.mOutline
+      visible: largeButtonRoot.number > 0 && !largeButtonRoot.pending
+      z: 10
+
+      NText {
+        id: largeNumberText
+        anchors.centerIn: parent
+        text: largeButtonRoot.number
+        pointSize: Style.fontSizeM
+        color: {
+          if (largeButtonRoot.isSelected || mouseArea.containsMouse)
+            return Color.mOnPrimary;
+          return Color.mOnSurface;
+        }
+
+        Behavior on color {
+          ColorAnimation {
+            duration: Style.animationFast
+            easing.type: Easing.OutCirc
+          }
+        }
+      }
+    }
+
+    MouseArea {
+      id: mouseArea
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+
+      onClicked: largeButtonRoot.clicked()
     }
   }
 }

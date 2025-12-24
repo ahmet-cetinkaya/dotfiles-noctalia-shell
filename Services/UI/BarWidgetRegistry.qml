@@ -8,6 +8,9 @@ import qs.Modules.Bar.Widgets
 Singleton {
   id: root
 
+  // Signal emitted when plugin widgets are registered/unregistered
+  signal pluginWidgetRegistryUpdated
+
   // Widget registry object mapping widget names to components
   property var widgets: ({
                            "ActiveWindow": activeWindowComponent,
@@ -33,7 +36,6 @@ Singleton {
                            "Spacer": spacerComponent,
                            "SystemMonitor": systemMonitorComponent,
                            "Taskbar": taskbarComponent,
-                           "TaskbarGrouped": taskbarGroupedComponent,
                            "Tray": trayComponent,
                            "Volume": volumeComponent,
                            "VPN": vpnComponent,
@@ -60,7 +62,6 @@ Singleton {
                                      "Spacer": "WidgetSettings/SpacerSettings.qml",
                                      "SystemMonitor": "WidgetSettings/SystemMonitorSettings.qml",
                                      "Taskbar": "WidgetSettings/TaskbarSettings.qml",
-                                     "TaskbarGrouped": "WidgetSettings/TaskbarGroupedSettings.qml",
                                      "Tray": "WidgetSettings/TraySettings.qml",
                                      "Volume": "WidgetSettings/VolumeSettings.qml",
                                      "VPN": "WidgetSettings/VPNSettings.qml",
@@ -90,7 +91,8 @@ Singleton {
                                     "warningThreshold": 30,
                                     "deviceNativePath": "",
                                     "showPowerProfiles": false,
-                                    "showNoctaliaPerformance": false
+                                    "showNoctaliaPerformance": false,
+                                    "hideIfNotDetected": true
                                   },
                                   "Bluetooth": {
                                     "allowUserSettings": true,
@@ -178,7 +180,7 @@ Singleton {
                                   "NotificationHistory": {
                                     "allowUserSettings": true,
                                     "showUnreadBadge": true,
-                                    "hideWhenZero": true
+                                    "hideWhenZero": false
                                   },
                                   "SessionMenu": {
                                     "allowUserSettings": true,
@@ -193,6 +195,7 @@ Singleton {
                                     "usePrimaryColor": false,
                                     "showCpuUsage": true,
                                     "showCpuTemp": true,
+                                    "showGpuTemp": false,
                                     "showMemoryUsage": true,
                                     "showMemoryAsPercent": false,
                                     "showNetworkStats": false,
@@ -209,21 +212,16 @@ Singleton {
                                     "titleWidth": 120,
                                     "showPinnedApps": true,
                                     "smartWidth": true,
-                                    "maxTaskbarWidth": 40
-                                  },
-                                  "TaskbarGrouped": {
-                                    "allowUserSettings": true,
-                                    "hideUnoccupied": false,
-                                    "labelMode": "index",
-                                    "showLabelsOnlyWhenOccupied": true,
-                                    "colorizeIcons": false
+                                    "maxTaskbarWidth": 40,
+                                    "iconScale": 1.0
                                   },
                                   "Tray": {
                                     "allowUserSettings": true,
                                     "blacklist": [],
                                     "colorizeIcons": false,
                                     "pinned": [],
-                                    "drawerEnabled": true
+                                    "drawerEnabled": true,
+                                    "hidePassive": false
                                   },
                                   "VPN": {
                                     "allowUserSettings": true,
@@ -238,7 +236,11 @@ Singleton {
                                     "labelMode": "index",
                                     "followFocusedScreen": false,
                                     "hideUnoccupied": false,
-                                    "characterCount": 2
+                                    "characterCount": 2,
+                                    "showApplications": false,
+                                    "showLabelsOnlyWhenOccupied": true,
+                                    "colorizeIcons": false,
+                                    "enableScrollWheel": true
                                   },
                                   "Volume": {
                                     "allowUserSettings": true,
@@ -334,10 +336,6 @@ Singleton {
   property Component taskbarComponent: Component {
     Taskbar {}
   }
-  property Component taskbarGroupedComponent: Component {
-    TaskbarGrouped {}
-  }
-
   function init() {
     Logger.i("BarWidgetRegistry", "Service started");
   }
@@ -388,6 +386,7 @@ Singleton {
     widgetMetadata[widgetId] = metadata || {};
 
     Logger.i("BarWidgetRegistry", "Registered plugin widget:", widgetId);
+    root.pluginWidgetRegistryUpdated();
     return true;
   }
 
@@ -406,6 +405,7 @@ Singleton {
     delete widgetMetadata[widgetId];
 
     Logger.i("BarWidgetRegistry", "Unregistered plugin widget:", widgetId);
+    root.pluginWidgetRegistryUpdated();
     return true;
   }
 

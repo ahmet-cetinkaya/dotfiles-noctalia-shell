@@ -39,6 +39,7 @@ Item {
   implicitWidth: pill.width
   implicitHeight: pill.height
   visible: getMonitor() !== null
+  opacity: getMonitor() !== null ? 1.0 : 0.0
 
   function getMonitor() {
     return BrightnessService.getMonitorForScreen(screen) || null;
@@ -151,8 +152,7 @@ Item {
       var popupMenuWindow = PanelService.getPopupMenuWindow(screen);
       if (popupMenuWindow) {
         popupMenuWindow.showContextMenu(contextMenu);
-        const pos = BarService.getContextMenuPosition(pill, contextMenu.implicitWidth, contextMenu.implicitHeight);
-        contextMenu.openAtItem(pill, pos.x, pos.y);
+        contextMenu.openAtItem(pill, screen);
       }
     }
   }

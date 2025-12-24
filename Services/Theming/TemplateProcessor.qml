@@ -54,7 +54,7 @@ Singleton {
     handleTerminalThemes(mode);
 
     const colors = schemeData[mode];
-    let script = processAllTemplates(colors, mode);
+    let script = processAllTemplates(colors, mode, schemeData);
 
     // Add user templates if enabled (requirement #1)
     script += buildUserTemplateCommandForPredefined(schemeData, mode);
@@ -118,20 +118,14 @@ Singleton {
                                             } else if (app.id === "code") {
                                               // Handle Code clients specially
                                               if (Settings.data.templates.code) {
+                                                const homeDir = Quickshell.env("HOME");
                                                 app.clients.forEach(client => {
                                                                       // Check if this specific client is detected
                                                                       if (isCodeClientEnabled(client.name)) {
                                                                         lines.push(`\n[templates.code_${client.name}]`);
                                                                         lines.push(`input_path = "${Quickshell.shellDir}/Assets/MatugenTemplates/${app.input}"`);
-                                                                        lines.push(`output_path = "${client.path}"`);
-                                                                        var configDir = client.name === "code" ? "Code" : "VSCodium";
-                                                                        var settingsPath = `~/.config/${configDir}/User/settings.json`;
-                                                                        // install the vsix theme file only if grep returns null
-                                                                        var installVsix = `${client.name} --list-extensions | grep -q noctaliatheme || ${client.name} --install-extension '${Quickshell.shellDir}/Assets/MatugenTemplates/noctaliatheme-0.0.1.vsix'`;
-                                                                        // update the settings.json file to use the Noctalia theme
-                                                                        var updateSettingsJson = `if [ -f ${settingsPath} ]; then sed -i '/\\\"workbench.colorTheme\\\":/d' ${settingsPath} && sed -i '1,/{/s/{/{\\\\n    \\\"workbench.colorTheme\\\": \\\"NoctaliaTheme\\\",/' ${settingsPath}; fi`;
-                                                                        // do things :3
-                                                                        lines.push(`post_hook = "sh -c \\"${installVsix}; ${updateSettingsJson}\\""`);
+                                                                        const expandedPath = client.path.replace("~", homeDir);
+                                                                        lines.push(`output_path = "${expandedPath}"`);
                                                                       }
                                                                     });
                                               }
@@ -205,7 +199,7 @@ Singleton {
   // ================================================================================
   // PREDEFINED SCHEME GENERATION (sed scripts)
   // ================================================================================
-  function processAllTemplates(colors, mode) {
+  function processAllTemplates(colors, mode, schemeData) {
     let script = "";
     const homeDir = Quickshell.env("HOME");
 
@@ -220,7 +214,7 @@ Singleton {
                                               }
                                             } else {
                                               if (Settings.data.templates[app.id]) {
-                                                script += processTemplate(app, colors, mode, homeDir);
+                                                script += processTemplate(app, colors, mode, homeDir, schemeData);
                                               }
                                             }
                                           });
@@ -284,8 +278,17 @@ Singleton {
     return script;
   }
 
-  function processTemplate(app, colors, mode, homeDir) {
+  function processTemplate(app, colors, mode, homeDir, schemeData) {
     const palette = ColorPaletteGenerator.generatePalette(colors, Settings.data.colorSchemes.darkMode, app.strict || false);
+
+    // For templates with both dark and light patterns (like zed.json), generate both palettes
+    const hasDualModePatterns = app.dualMode || false;
+    let darkPalette, lightPalette;
+    if (hasDualModePatterns && schemeData) {
+      darkPalette = ColorPaletteGenerator.generatePalette(schemeData.dark, true, app.strict || false);
+      lightPalette = ColorPaletteGenerator.generatePalette(schemeData.light, false, app.strict || false);
+    }
+
     let script = "";
 
     if (app.id === "emacs" && app.checkDoomFirst) {
@@ -316,6 +319,9 @@ Singleton {
                             script += `mkdir -p ${outputDir}\n`;
                             script += `cp '${templatePath}' '${outputPath}'\n`;
                             script += replaceColorsInFile(outputPath, palette);
+                            if (hasDualModePatterns && darkPalette && lightPalette) {
+                              script += replaceColorsInFileWithMode(outputPath, darkPalette, lightPalette);
+                            }
                             script += `\n`;
                           });
     }
@@ -328,7 +334,8 @@ Singleton {
   }
 
   function replaceColorsInFile(filePath, colors) {
-    let script = "";
+    let expressions = [];
+
     Object.keys(colors).forEach(colorKey => {
                                   const hexValue = colors[colorKey].default.hex;
                                   const hexStrippedValue = colors[colorKey].default.hex_stripped;
@@ -336,13 +343,40 @@ Singleton {
                                   const escapedHex = hexValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                                   const escapedHexStripped = hexStrippedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-                                  // replace hex_stripped
-                                  script += `sed -i 's/{{colors\\.${colorKey}\\.default\\.hex_stripped}}/${escapedHexStripped}/g' '${filePath}'\n`;
-
-                                  // replace hex
-                                  script += `sed -i 's/{{colors\\.${colorKey}\\.default\\.hex}}/${escapedHex}/g' '${filePath}'\n`;
+                                  // Batch all replacements into a single sed command to avoid ARG_MAX limits
+                                  expressions.push(`-e 's/{{colors\\.${colorKey}\\.default\\.hex_stripped}}/${escapedHexStripped}/g'`);
+                                  expressions.push(`-e 's/{{colors\\.${colorKey}\\.default\\.hex}}/${escapedHex}/g'`);
                                 });
-    return script;
+    return `sed -i ${expressions.join(' ')} '${filePath}'\n`;
+  }
+
+  function replaceColorsInFileWithMode(filePath, darkColors, lightColors) {
+    let expressions = [];
+
+    // Replace dark mode patterns
+    Object.keys(darkColors).forEach(colorKey => {
+                                      const hexValue = darkColors[colorKey].default.hex;
+                                      const hexStrippedValue = darkColors[colorKey].default.hex_stripped;
+                                      const escapedHex = hexValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                      const escapedHexStripped = hexStrippedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+                                      expressions.push(`-e 's/{{colors\\.${colorKey}\\.dark\\.hex_stripped}}/${escapedHexStripped}/g'`);
+                                      expressions.push(`-e 's/{{colors\\.${colorKey}\\.dark\\.hex}}/${escapedHex}/g'`);
+                                    });
+
+    // Replace light mode patterns
+    Object.keys(lightColors).forEach(colorKey => {
+                                       const hexValue = lightColors[colorKey].default.hex;
+                                       const hexStrippedValue = lightColors[colorKey].default.hex_stripped;
+                                       const escapedHex = hexValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                       const escapedHexStripped = hexStrippedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+                                       expressions.push(`-e 's/{{colors\\.${colorKey}\\.light\\.hex_stripped}}/${escapedHexStripped}/g'`);
+                                       expressions.push(`-e 's/{{colors\\.${colorKey}\\.light\\.hex}}/${escapedHex}/g'`);
+                                     });
+
+    // Batch all replacements into a single sed command to avoid ARG_MAX limits
+    return `sed -i ${expressions.join(' ')} '${filePath}'\n`;
   }
 
   // ================================================================================
